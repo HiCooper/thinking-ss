@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>货币供应量同比：M1 与 M2（2023-08 → 2026-07）</title>
+<style>
+  :root {
+    --page: #f9f9f7;
+    --surface: #fcfcfb;
+    --ink: #0b0b0b;
+    --ink-2: #52514e;
+    --muted: #898781;
+    --grid: #e1e0d9;
+    --axis: #c3c2b7;
+    --border: rgba(11,11,11,0.10);
+    --s1: #2a78d6;   /* M1 蓝 */
+    --s2: #eb6834;   /* M2 橙 */
+    --tint: rgba(11,11,11,0.035);
+    --shadow: 0 1px 2px rgba(11,11,11,0.06);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --page: #0d0d0d;
+      --surface: #1a1a19;
+      --ink: #ffffff;
+      --ink-2: #c3c2b7;
+      --muted: #898781;
+      --grid: #2c2c2a;
+      --axis: #383835;
+      --border: rgba(255,255,255,0.10);
+      --s1: #3987e5;
+      --s2: #d95926;
+      --tint: rgba(255,255,255,0.04);
+      --shadow: 0 1px 2px rgba(0,0,0,0.4);
+    }
+  }
+  :root[data-theme="dark"] {
+    --page: #0d0d0d;
+    --surface: #1a1a19;
+    --ink: #ffffff;
+    --ink-2: #c3c2b7;
+    --muted: #898781;
+    --grid: #2c2c2a;
+    --axis: #383835;
+    --border: rgba(255,255,255,0.10);
+    --s1: #3987e5;
+    --s2: #d95926;
+    --tint: rgba(255,255,255,0.04);
+    --shadow: 0 1px 2px rgba(0,0,0,0.4);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--page);
+    color: var(--ink);
+    font: 14px/1.5 system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 960px; margin: 0 auto; padding: 40px 24px 64px; }
+
+  header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+  h1 { margin: 0 0 6px; font-size: 20px; font-weight: 650; letter-spacing: -0.01em; }
+  .sub { margin: 0; color: var(--ink-2); font-size: 13.5px; max-width: 640px; }
+  .theme-btn {
+    flex: none; margin-top: 2px; cursor: pointer;
+    border: 1px solid var(--border); background: var(--surface); color: var(--ink-2);
+    border-radius: 8px; padding: 6px 12px; font-size: 12.5px;
+  }
+  .theme-btn:hover { color: var(--ink); }
+
+  .card {
+    margin-top: 22px; background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; box-shadow: var(--shadow); padding: 20px 20px 12px;
+  }
+
+  .legend { display: flex; gap: 22px; padding: 0 4px 10px; font-size: 13px; color: var(--ink-2); }
+  .legend .item { display: flex; align-items: center; gap: 8px; }
+  .legend .key { width: 22px; height: 0; border-top: 2.5px solid; border-radius: 2px; }
+
+  svg { display: block; width: 100%; height: auto; }
+  .axis-t { font-size: 11px; fill: var(--muted); font-variant-numeric: tabular-nums; }
+  .grid-l { stroke: var(--grid); stroke-width: 1; }
+  .axis-l { stroke: var(--axis); stroke-width: 1; }
+  .series { fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .zero-label { font-size: 11px; fill: var(--muted); }
+  .band { fill: var(--tint); }
+  .boundary { stroke: var(--axis); stroke-width: 1; }
+  .boundary-label { font-size: 11px; fill: var(--muted); }
+  .endlabel { font-size: 12px; font-weight: 600; fill: var(--ink); }
+  .extremelabel { font-size: 11px; fill: var(--ink-2); }
+  .dot { stroke: var(--surface); stroke-width: 2; }
+  .crosshair { stroke: var(--ink-2); stroke-width: 1; stroke-dasharray: none; }
+
+  #tooltip {
+    position: fixed; pointer-events: none; display: none; z-index: 10;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+    box-shadow: var(--shadow); padding: 8px 10px; font-size: 12.5px; min-width: 130px;
+  }
+  #tooltip .date { color: var(--ink-2); font-size: 11.5px; margin-bottom: 5px; }
+  #tooltip .row { display: flex; align-items: center; gap: 8px; margin-top: 2px; }
+  #tooltip .row .lk { width: 16px; height: 0; border-top: 2.5px solid; border-radius: 2px; flex: none; }
+  #tooltip .row .nm { color: var(--ink-2); }
+  #tooltip .row .val { margin-left: auto; font-weight: 650; font-variant-numeric: tabular-nums; color: var(--ink); }
+
+  .caption { color: var(--muted); font-size: 12px; margin: 10px 4px 0; line-height: 1.55; }
+  .tbl-toggle { margin: 12px 4px 0; cursor: pointer; border: none; background: none; color: var(--s1);
+    font-size: 12.5px; padding: 0; text-decoration: underline; }
+  table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 12.5px; }
+  th, td { text-align: right; padding: 6px 8px; border-top: 1px solid var(--grid); }
+  th:first-child, td:first-child { text-align: left; }
+  th { color: var(--muted); font-weight: 550; }
+  td { font-variant-numeric: tabular-nums; }
+  td.neg { color: var(--s2); }
+  .table-wrap { display: none; }
+  .table-wrap.open { display: block; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>货币供应量同比：M1 与 M2</h1>
+      <p class="sub">2023-08 → 2026-07，月同比（%）。两线之间的垂直距离即 M2−M1 剪刀差：距离越大，说明钱越往定期里淤、活钱越少。2025 年 1 月起 M1 口径调整，前后不可直接比较（图中以竖线标出）。</p>
+    </div>
+    <button class="theme-btn" id="themeBtn" type="button">深色模式</button>
+  </header>
+
+  <div class="card">
+    <div class="legend">
+      <span class="item"><span class="key" style="border-color:var(--s1)"></span>M1 同比（活钱）</span>
+      <span class="item"><span class="key" style="border-color:var(--s2)"></span>M2 同比（总货币）</span>
+    </div>
+    <div id="chart"></div>
+    <button class="tbl-toggle" id="tblToggle" type="button">显示数据表</button>
+    <div class="table-wrap" id="tableWrap"></div>
+    <p class="caption">注：M1 口径自 2025 年 1 月起纳入个人活期存款与非银行支付机构客户备付金，此前的旧口径 M1 不含个人活期，故图中竖线左侧（旧口径）与右侧（新口径）的 M1 绝对值不可直接比较；M2 口径未调整，全段可比。数据来源：中国人民银行，经 akshare 汇总。</p>
+  </div>
+</div>
+
+<div id="tooltip"></div>
+
+<script src="m1-m2-data.js"></script>
+<script>
+(function () {
+  "use strict";
+
+  // 数据来自 m1-m2-data.js（由 update_m1m2.py 生成），时间升序
+  var data = window.M1M2_DATA;
+  var n = data.length;
+  var redefIdx = data.findIndex(function (r) { return r.d === window.M1M2_REDEF; });
+
+  var W = 960, H = 520;
+  var m = { top: 26, right: 92, bottom: 52, left: 60 };
+  var plotW = W - m.left - m.right, plotH = H - m.top - m.bottom;
+  var yMin = -10, yMax = 12;
+  var x = function (i) { return m.left + (i / (n - 1)) * plotW; };
+  var y = function (v) { return m.top + ((yMax - v) / (yMax - yMin)) * plotH; };
+
+  var el = document.getElementById("chart");
+  el.innerHTML = '<svg viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="M1 与 M2 同比折线图">' + build() + '</svg>';
+
+  function build() {
+    var s = "";
+    var yTicks = [-10, -5, 0, 5, 10];
+
+    // 旧口径背景带 + 口径调整竖线（仅当窗口内含调整月）
+    var boundX = (redefIdx >= 1) ? ((x(redefIdx - 1) + x(redefIdx)) / 2) : null;
+    if (boundX) {
+      s += '<rect class="band" x="' + m.left + '" y="' + m.top + '" width="' + (boundX - m.left) + '" height="' + plotH + '"/>';
+    }
+
+    // 网格线 + y 轴刻度
+    yTicks.forEach(function (t) {
+      var yy = y(t);
+      s += '<line class="' + (t === 0 ? "axis-l" : "grid-l") + '" x1="' + m.left + '" y1="' + yy + '" x2="' + (W - m.right) + '" y2="' + yy + '"/>';
+      s += '<text class="axis-t" x="' + (m.left - 8) + '" y="' + (yy + 4) + '" text-anchor="end">' + (t === 0 ? "0%" : (t > 0 ? t + "%" : t + "%")) + "</text>";
+    });
+    // x 轴刻度（每 6 个月）
+    for (var i = 0; i < n; i += 6) {
+      s += '<text class="axis-t" x="' + x(i) + '" y="' + (H - m.bottom + 20) + '" text-anchor="middle">' + data[i].d + "</text>";
+    }
+    s += '<text class="axis-t" x="' + x(n - 1) + '" y="' + (H - m.bottom + 20) + '" text-anchor="middle">' + data[n - 1].d + "</text>";
+
+    // 口径调整竖线 + 标签
+    if (boundX) {
+      s += '<line class="boundary" x1="' + boundX + '" y1="' + m.top + '" x2="' + boundX + '" y2="' + (m.top + plotH) + '"/>';
+      s += '<text class="boundary-label" x="' + (boundX + 5) + '" y="' + (m.top + 12) + '">M1 口径调整</text>';
+    }
+
+    // 折线
+    s += linePath(data.map(function (r) { return r.m1; }), "series", "var(--s1)");
+    s += linePath(data.map(function (r) { return r.m2; }), "series", "var(--s2)");
+
+    // 端点圆点（2px surface 环）
+    s += dot(x(n - 1), y(data[n - 1].m1), "var(--s1)");
+    s += dot(x(n - 1), y(data[n - 1].m2), "var(--s2)");
+
+    // 端点标签
+    s += '<text class="endlabel" x="' + (x(n - 1) + 9) + '" y="' + (y(data[n - 1].m1) + 4) + '">M1 ' + fmt(data[n - 1].m1) + "%</text>";
+    s += '<text class="endlabel" x="' + (x(n - 1) + 9) + '" y="' + (y(data[n - 1].m2) + 4) + '">M2 ' + fmt(data[n - 1].m2) + "%</text>";
+
+    // 关键极值标签（M1 谷 + 峰，动态取最小/最大）
+    var troughIdx = 0, peakIdx = 0;
+    for (var j = 1; j < n; j++) {
+      if (data[j].m1 < data[troughIdx].m1) troughIdx = j;
+      if (data[j].m1 > data[peakIdx].m1) peakIdx = j;
+    }
+    if (troughIdx !== n - 1) {
+      s += dot(x(troughIdx), y(data[troughIdx].m1), "var(--s1)", 4);
+      s += '<text class="extremelabel" x="' + (x(troughIdx) + 8) + '" y="' + (y(data[troughIdx].m1) + 4) + '">' + fmt(data[troughIdx].m1) + "%（" + data[troughIdx].d + " 谷）</text>";
+    }
+    if (peakIdx !== n - 1) {
+      s += dot(x(peakIdx), y(data[peakIdx].m1), "var(--s1)", 4);
+      s += '<text class="extremelabel" x="' + (x(peakIdx) + 8) + '" y="' + (y(data[peakIdx].m1) - 6) + '" text-anchor="start">' + fmt(data[peakIdx].m1) + "%（" + data[peakIdx].d + " 峰）</text>";
+    }
+
+    return s;
+  }
+
+  function linePath(vals, cls, color) {
+    var d = "M";
+    for (var i = 0; i < n; i++) {
+      d += (i === 0 ? "" : " L") + x(i).toFixed(2) + " " + y(vals[i]).toFixed(2);
+    }
+    return '<path class="' + cls + '" d="' + d + '" style="stroke:' + color + '"/>';
+  }
+  function dot(cx, cy, color, r) {
+    r = r || 4.5;
+    return '<circle class="dot" cx="' + cx + '" cy="' + cy + '" r="' + r + '" style="fill:' + color + '"/>';
+  }
+  function fmt(v) { return (v > 0 ? "+" : "") + v.toFixed(1); }
+
+  // 交互：crosshair + tooltip
+  var svg = el.querySelector("svg");
+  var tip = document.getElementById("tooltip");
+  var overlay = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+  overlay.setAttribute("x", m.left); overlay.setAttribute("y", m.top);
+  overlay.setAttribute("width", plotW); overlay.setAttribute("height", plotH);
+  overlay.setAttribute("fill", "transparent");
+  svg.appendChild(overlay);
+  var ch = document.createElementNS("http://www.w3.org/2000/svg", "line");
+  ch.setAttribute("class", "crosshair"); ch.setAttribute("y1", m.top); ch.setAttribute("y2", m.top + plotH);
+  ch.style.display = "none"; svg.appendChild(ch);
+  var hoverDot = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+  hoverDot.setAttribute("r", 4.5); hoverDot.style.fill = "var(--s1)";
+  hoverDot.style.display = "none"; svg.appendChild(hoverDot);
+
+  function onMove(ev) {
+    var rect = svg.getBoundingClientRect();
+    var px = (ev.clientX - rect.left) * (W / rect.width);
+    var py = (ev.clientY - rect.top) * (H / rect.height);
+    if (px < m.left || px > W - m.right || py < m.top || py > m.top + plotH) { hide(); return; }
+    var t = (px - m.left) / plotW;
+    var idx = Math.round(t * (n - 1));
+    idx = Math.max(0, Math.min(n - 1, idx));
+    var r = data[idx];
+    var cx = x(idx);
+    ch.setAttribute("x1", cx); ch.setAttribute("x2", cx);
+    ch.style.display = "";
+    hoverDot.setAttribute("cx", cx); hoverDot.setAttribute("cy", y(r.m1));
+    hoverDot.style.fill = "var(--s1)"; hoverDot.style.display = "";
+
+    tip.innerHTML =
+      '<div class="date">' + r.d + '</div>' +
+      '<div class="row"><span class="lk" style="border-color:var(--s1)"></span><span class="nm">M1 同比</span><span class="val">' + fmt(r.m1) + '%</span></div>' +
+      '<div class="row"><span class="lk" style="border-color:var(--s2)"></span><span class="nm">M2 同比</span><span class="val">' + fmt(r.m2) + '%</span></div>' +
+      '<div class="row"><span class="lk" style="border-color:var(--muted)"></span><span class="nm">剪刀差</span><span class="val">' + (r.m2 - r.m1).toFixed(1) + ' 个点</span></div>';
+    tip.style.display = "block";
+    var tx = ev.clientX + 14, ty = ev.clientY + 14;
+    if (tx + 150 > window.innerWidth) tx = ev.clientX - 150;
+    if (ty + 90 > window.innerHeight) ty = ev.clientY - 90;
+    tip.style.left = tx + "px"; tip.style.top = ty + "px";
+  }
+  function hide() { ch.style.display = "none"; hoverDot.style.display = "none"; tip.style.display = "none"; }
+  overlay.addEventListener("mousemove", onMove);
+  overlay.addEventListener("mouseleave", hide);
+
+  // 数据表
+  var tw = document.getElementById("tableWrap");
+  var rows = data.map(function (r) {
+    return '<tr><td>' + r.d + '</td><td class="' + (r.m1 < 0 ? "neg" : "") + '">' + fmt(r.m1) + '%</td>' +
+      '<td>' + fmt(r.m2) + '%</td><td>' + (r.m2 - r.m1).toFixed(1) + '</td></tr>';
+  }).join("");
+  tw.innerHTML = '<table><thead><tr><th>月份</th><th>M1 同比</th><th>M2 同比</th><th>剪刀差（百分点）</th></tr></thead><tbody>' + rows + "</tbody></table>";
+  document.getElementById("tblToggle").addEventListener("click", function () {
+    var open = tw.classList.toggle("open");
+    this.textContent = open ? "隐藏数据表" : "显示数据表";
+  });
+
+  // 主题切换
+  document.getElementById("themeBtn").addEventListener("click", function () {
+    var cur = document.documentElement.getAttribute("data-theme");
+    var next = (cur === "dark") ? "light" : "dark";
+    document.documentElement.setAttribute("data-theme", next);
+    this.textContent = (next === "dark") ? "浅色模式" : "深色模式";
+  });
+})();
+</script>
+</body>
+</html>
