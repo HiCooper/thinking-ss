@@ -224,6 +224,14 @@ market-dashboard/
 **Node 要求随之提高**：vite 8 需要 **`^20.19.0 || >=22.12.0`**（见 `package.json` 的 `engines` 与 `.nvmrc`；
 `npm start` 会先检查版本并给出可操作提示）。
 
+> **浏览器基线也提高了**：vite 8 的 `build.target` 默认由 `'modules'` 变为 **`baseline-widely-available`**，
+> 产物 CSS 会输出 `@media (width<=1080px)` 这类新语法（需要 **Chrome 104+ / Safari 16.4+**）。
+> 语义等价，本项目未改配置；若要兼容更老的浏览器，在 `vite.config.ts` 里显式设置 `build.target`。
+>
+> **打包器换成 Rolldown 了**：vite 8 内置 rolldown 1.2.8 取代 rollup + esbuild ——
+> 这也是 esbuild 那条告警「消失」而非「修复」的原因（整包已不在依赖树里）。副作用是构建更快
+> （~4s → 0.6–1.7s）；JS 产物 +4.5% 全部来自 echarts 6。
+
 ## 边界与已知限制
 
 - **北交所未纳入成交额历史**（成交额口径为沪深两市）；北交所只有**指数**在实时面板的 chips 里（北证50），没有单独的成交额展示（原先那张卡的成交额分项已随去重一并移除）。
