@@ -1,8 +1,13 @@
 import { useCallback, useEffect, useState } from 'react'
 import './App.css'
 import Dashboard from './components/Dashboard'
-import { DataMissingError, fetchMarketData } from './api'
+import { DataMissingError, fetchDataVersion, fetchMarketData } from './api'
 import type { MarketData } from './types'
+
+/** 轮询 `/api/data-version` 的间隔：与 LiveStrip 的实时刷新同频。 */
+const VERSION_POLL_MS = 30_000
+/** 「数据已更新」提示的停留时间（随后淡出）。 */
+const TOAST_MS = 2600
 
 type ViewState =
   | { status: 'loading' }
@@ -13,9 +18,14 @@ type ViewState =
 export default function App() {
   const [state, setState] = useState<ViewState>({ status: 'loading' })
   const [reloadKey, setReloadKey] = useState(0)
+  const [toast, setToast] = useState<string | null>(null)
 
-  const load = useCallback(async (signal: AbortSignal) => {
-    setState({ status: 'loading' })
+  /**
+   * `silent=true`（自动重载 / 手动重试且已有数据）时不切回 loading 态，
+   * 保留当前图表直到新数据到位，避免页面闪一下、尺寸跳动。
+   */
+  const load = useCallback(async (signal: AbortSignal, silent = false) => {
+    if (!silent) setState({ status: 'loading' })
     try {
       const data = await fetchMarketData(signal)
       if (signal.aborted) return
@@ -48,14 +58,57 @@ export default function App() {
 
   useEffect(() => {
     const controller = new AbortController()
-    void load(controller.signal)
+    // 首次加载显示 loading；之后（自动重载/重试）静默换数据
+    void load(controller.signal, reloadKey > 0)
     return () => controller.abort()
   }, [load, reloadKey])
+
+  // 数据热更新：每 30s 比对 data.json 的 mtime/size，变了就重载图表数据。
+  // /api/data-version 不可用（静态部署 404 / 网络失败）时 fetchDataVersion 返回 null，静默忽略。
+  useEffect(() => {
+    let alive = true
+    let lastKey: string | null = null
+
+    const check = async () => {
+      const version = await fetchDataVersion()
+      if (!alive || !version) return
+      const key = `${version.mtime}:${version.size}`
+      if (lastKey === null) {
+        lastKey = key // 首轮只记基线
+        return
+      }
+      if (key === lastKey) return
+      lastKey = key
+      setReloadKey((k) => k + 1)
+      const now = new Date()
+      setToast(`数据已更新 · ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`)
+    }
+
+    void check()
+    const id = window.setInterval(() => void check(), VERSION_POLL_MS)
+    return () => {
+      alive = false
+      window.clearInterval(id)
+    }
+  }, [])
+
+  // 提示自动淡出
+  useEffect(() => {
+    if (!toast) return
+    const id = window.setTimeout(() => setToast(null), TOAST_MS)
+    return () => window.clearTimeout(id)
+  }, [toast])
 
   const data = state.status === 'ready' ? state.data : null
 
   return (
     <div className="app">
+      {toast ? (
+        <div className="toast num" role="status">
+          {toast}
+        </div>
+      ) : null}
+
       <header className="topbar">
         <div className="topbar__brand">
           <span className="topbar__dot" aria-hidden="true" />

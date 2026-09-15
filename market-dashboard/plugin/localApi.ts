@@ -423,6 +423,67 @@ async function buildSpot(): Promise<SpotPayload> {
   }
 }
 
+/* ------------------------------ data.json 版本标记 ------------------------------ */
+
+export interface DataVersionPayload {
+  /** 文件 mtime（毫秒）；文件不存在时为 0 */
+  mtime: number
+  /** 文件字节数；文件不存在时为 0 */
+  size: number
+}
+
+interface StatsLike {
+  mtimeMs: number
+  size: number
+}
+
+interface FsLike {
+  statSync: (path: string) => StatsLike
+}
+
+let fsPromise: Promise<FsLike | null> | null = null
+
+/**
+ * 取 `node:fs`。本项目没有装 @types/node（装了也只为这一处），
+ * 所以用**变量说明符**动态 import：TS 不会去解析 `node:` 模块因而不会报 TS2307，
+ * esbuild 也会原样保留这行 import，运行时在 Node 里正常解析；也不需要新增任何依赖。
+ */
+function loadFs(): Promise<FsLike | null> {
+  if (!fsPromise) {
+    const specifier = 'node:fs'
+    fsPromise = import(/* @vite-ignore */ specifier)
+      .then((mod) => {
+        const fs = mod as Partial<FsLike>
+        return typeof fs.statSync === 'function' ? (fs as FsLike) : null
+      })
+      .catch(() => null)
+  }
+  return fsPromise
+}
+
+/** root + 目录（支持绝对/相对、去掉多余斜杠）→ data.json 的绝对路径。 */
+function dataFile(root: string, dir: string): string {
+  const clean = dir.replace(/\/+$/, '')
+  if (clean.startsWith('/')) return `${clean}/data.json`
+  const base = root.replace(/\/+$/, '')
+  return `${base}/${clean.replace(/^\.\//, '')}/data.json`
+}
+
+/** 依次探测候选文件，返回第一个存在者的 mtime/size；都不存在 → {0,0}（前端静默忽略）。 */
+async function readDataVersion(candidates: string[]): Promise<DataVersionPayload> {
+  const fs = await loadFs()
+  if (!fs) return { mtime: 0, size: 0 }
+  for (const file of candidates) {
+    try {
+      const st = fs.statSync(file)
+      return { mtime: Math.round(st.mtimeMs), size: st.size }
+    } catch {
+      // 文件不存在 / 无权限：试下一个候选
+    }
+  }
+  return { mtime: 0, size: 0 }
+}
+
 /* ------------------------------ 中间件 ------------------------------ */
 
 /**
@@ -463,11 +524,24 @@ function failurePayload(message: string): SpotPayload {
   }
 }
 
-export function localApi(): Plugin {
-  const middleware: Connect.NextHandleFunction = (req, res, next): void => {
+function createMiddleware(dataFiles: string[]): Connect.NextHandleFunction {
+  return (req, res, next): void => {
     const request = req as unknown as HttpRequestLike
     const response = res as unknown as HttpResponseLike
     const pathname = (request.url ?? '').split('?')[0]
+
+    // data.json 的版本标记：前端据此在数据脚本重新生成后自动重载图表
+    if (pathname === '/api/data-version') {
+      if (request.method && request.method !== 'GET' && request.method !== 'HEAD') {
+        sendJson(response, 405, { error: '仅支持 GET /api/data-version' })
+        return
+      }
+      void readDataVersion(dataFiles)
+        .then((payload) => sendJson(response, 200, payload))
+        .catch(() => sendJson(response, 200, { mtime: 0, size: 0 }))
+      return
+    }
+
     if (pathname !== '/api/spot') {
       next()
       return
@@ -482,14 +556,25 @@ export function localApi(): Plugin {
         sendJson(response, 200, failurePayload(err instanceof Error ? err.message : String(err))),
       )
   }
+}
 
+export function localApi(): Plugin {
   return {
     name: 'market-dashboard:local-api',
+    // dev：页面读的是 public/data.json
     configureServer(server) {
-      server.middlewares.use(middleware)
+      const { root, publicDir } = server.config
+      server.middlewares.use(createMiddleware([dataFile(root, publicDir || 'public')]))
     },
+    // preview：页面读的是构建产物 outDir/data.json；它不存在时退回 public/data.json
     configurePreviewServer(server) {
-      server.middlewares.use(middleware)
+      const { root, publicDir, build } = server.config
+      server.middlewares.use(
+        createMiddleware([
+          dataFile(root, build.outDir || 'dist'),
+          dataFile(root, publicDir || 'public'),
+        ]),
+      )
     },
   }
 }

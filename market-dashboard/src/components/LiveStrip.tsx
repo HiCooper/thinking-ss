@@ -209,12 +209,15 @@ function QuoteTile({
         {label}
         <span className="live-tile__time num">{time ?? '—'}</span>
       </div>
-      {/* 数值行高度由 22px 字号决定（≈26px）＞ 20px 迷你图，因此加图不会撑高卡片 */}
+      {/* 数值行：第一行「数值 + 涨跌幅」同行（涨跌幅紧跟数值），第二行迷你图。
+          把涨跌幅并入数值行省掉一整行，正好抵消迷你图占用的高度 → 卡片尺寸不变。 */}
       <div className="live-tile__value-row">
-        <div className="live-tile__value num">{fmtNum(price, 2)}</div>
+        <div className="live-tile__figure">
+          <span className="live-tile__value num">{fmtNum(price, 2)}</span>
+          <span className={`live-tile__chg num ${trendClass(chg)}`}>{fmtPct(chg)}</span>
+        </div>
         {usable && name ? <Sparkline series={usable} name={name} /> : null}
       </div>
-      <div className={`live-tile__chg num ${trendClass(chg)}`}>{fmtPct(chg)}</div>
     </div>
   )
 }

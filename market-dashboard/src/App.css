@@ -88,6 +88,43 @@
   background: var(--bg-elevated);
 }
 
+/* ============================ 数据更新提示 ============================ */
+/* fixed 定位：出现/淡出都不参与文档流，不会改变任何卡片尺寸 */
+.toast {
+  position: fixed;
+  top: 14px;
+  right: 16px;
+  z-index: 40;
+  padding: 6px 13px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #1f4f7a;
+  background: #eaf2fa;
+  border: 1px solid #cfe0f0;
+  border-radius: 999px;
+  box-shadow: 0 6px 20px rgba(15, 30, 60, 0.12);
+  pointer-events: none;
+  animation: toast-in 0.22s ease-out, toast-out 0.5s ease-in 2.1s forwards;
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes toast-out {
+  to {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+}
+
 /* ============================ 内容区 ============================ */
 .content {
   display: flex;
@@ -340,26 +377,31 @@
   line-height: 1.2;
 }
 
-/* 数值行：左侧数值、右侧迷你图。行高由 22px 字号决定（≈26px）＞ 20px 迷你图，
-   因此加图不会改变卡片高度；迷你图只吃剩余宽度，不参与纵向布局。 */
+/* 数值行：数值在上、迷你图在下（纵向）。行内 gap 4px；迷你图占满内容宽度。 */
 .live-tile__value-row {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
   min-width: 0;
 }
 
 .live-tile__value-row .live-tile__value {
-  flex: 0 1 auto;
   min-width: 0;
   white-space: nowrap;
 }
 
-.live-spark {
-  flex: 1 1 56px;
+/* 数值行第一行：数值 + 涨跌幅并排（涨跌幅紧跟数值，基线对齐）。 */
+.live-tile__figure {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
   min-width: 0;
-  max-width: 120px;
+  flex-wrap: nowrap;
+}
+
+.live-spark {
+  width: 100%;
   height: 20px;
   display: block;
   overflow: hidden;
@@ -383,6 +425,8 @@
 .live-tile__chg {
   font-size: 13px;
   font-weight: 600;
+  flex: 0 0 auto;
+  white-space: nowrap;
 }
 
 .live-tile__parts {

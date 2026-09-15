@@ -261,3 +261,31 @@ export async function fetchSpot(signal?: AbortSignal): Promise<SpotData> {
   }
   return normalizeSpot(raw)
 }
+
+/* ------------------------------ /api/data-version（数据热更新） ------------------------------ */
+
+/** `public/data.json` 的版本标记：mtime + size。 */
+export interface DataVersion {
+  mtime: number
+  size: number
+}
+
+/**
+ * 读取 `/api/data-version`（由 Vite 插件返回 data.json 的 mtime/size）。
+ * 静态部署下该路径不存在（404）或网络失败 → 返回 null，由调用方**静默忽略**：
+ * 不影响图表、不弹错误。
+ */
+export async function fetchDataVersion(): Promise<DataVersion | null> {
+  try {
+    const res = await fetch('/api/data-version', { cache: 'no-store' })
+    if (!res.ok) return null
+    const o = objOf(await res.json())
+    if (!o) return null
+    const mtime = toNum(o.mtime)
+    const size = toNum(o.size)
+    if (mtime === null || size === null) return null
+    return { mtime, size }
+  } catch {
+    return null
+  }
+}
