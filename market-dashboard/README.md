@@ -2,18 +2,43 @@
 
 一个 React + Vite + ECharts 的本地看板：**实时面板 + 5 张折线图**，跟踪量能、利率、杠杆与跨市场联动。
 
-## 快速开始
+## 换一台电脑：一键启动
+
+前置只有一个：**Node ≥ 18**（推荐 20 / 22 LTS，见 `.nvmrc`）。**不需要 Python** —— 行情数据 `public/data.json` 与两个本地缓存都随仓库提交，开箱即有数据。
 
 ```bash
-cd market-dashboard
-npm install
-npm run dev        # 开发服务器 → http://127.0.0.1:5183
-npm run build      # 类型检查（tsc --noEmit）+ 构建到 dist/
-npm run preview    # 预览构建产物（同样绑定 127.0.0.1:5183，strictPort）
-npm run typecheck  # 只做类型检查
+git clone <repo-url> && cd market-dashboard
+npm start                      # 首次自动 npm ci 装依赖 → 起服务
 ```
 
-端口固定在 **5183**（见 `vite.config.ts`，`strictPort: true`），不会因占用而漂移。
+打开 **http://127.0.0.1:5183**。端口被占就换一个：
+
+```bash
+PORT=5190 npm start
+```
+
+`npm start` 会依次做三件事：检查 Node 版本 → 缺 `node_modules` 就 `npm ci`（按 `package-lock.json` 精确还原，首次约 20–60 秒）→ 起 dev server。之后启动是秒级。
+
+> **启动不需要 Python、不需要联网**：数据文件在仓库里，`/api/spot` 的实时数据由 Vite 插件在本地代理（无 Node 服务时该面板自动降级为提示，5 张历史图照常）。
+
+### 只有「更新数据」才需要 akshare（可选）
+
+```bash
+npm run data:setup                    # 一次性：在项目下建 .venv-data/ 并安装 akshare
+npm run data:refresh                  # 增量更新（联网，只抓缓存里没有的日期）
+npm run data:refresh -- --offline      # 完全不联网，用仓库里的缓存重建 data.json
+```
+
+`scripts/refresh.sh` 按 **`$DASH_PY` → `./.venv-data` → `$SKILLS/ashare-data/.venv` → `python3`** 的顺序找解释器，**无任何硬编码路径**；找不到 akshare 时给的是可操作提示（装环境 / 改用 `--offline`），不是一堆栈。
+
+### 其他命令
+
+```bash
+npm run build      # 类型检查（tsc --noEmit）+ 构建到 dist/
+npm run preview    # 预览构建产物（同样绑定 PORT，默认 5183）
+npm run typecheck  # 只做类型检查
+npm run data:validate   # 校验 public/data.json 的字段与派生比率
+```
 
 > **实时面板需要服务端**：`/api/spot` 由 Vite 插件在本地代理新浪接口（浏览器直连会被 CORS 挡）。
 > 所以实时数据在 `npm run dev` / `npm run preview` 下可用；把 `dist/` 静态托管到别处（无 Node 服务）时，

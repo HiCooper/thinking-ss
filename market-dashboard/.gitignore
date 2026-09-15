@@ -4,3 +4,7 @@ dist-ssr
 *.local
 .DS_Store
 .vite
+.venv-data/
+__pycache__/
+*.pyc
+*.log
