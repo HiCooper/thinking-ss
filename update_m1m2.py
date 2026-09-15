@@ -3,7 +3,7 @@
 """重新生成 m1-m2-data.js：近 N 个月 M1/M2 同比，供 m1-m2-trend.html 复用。
 
 运行（用 skill 自带的 akshare 虚拟环境，系统 python 没装 akshare）：
-    ~/.claude/skills/ashare-data/.venv/bin/python update_m1m2.py [月数]
+    /Users/xueancao/Projects/QoderProjects/agents-silky/skills/ashare-data/.venv/bin/python update_m1m2.py [月数]
 
 默认取最近 36 个月；可传参，如 `... update_m1m2.py 48`。
 输出写到本脚本同目录下的 m1-m2-data.js，覆盖旧数据。
@@ -39,7 +39,7 @@ for _, r in recent.iterrows():
 body = ",\n".join(rows)
 out = (
     "// 自动生成：近 {} 个月货币供应量同比（%）。\n"
-    "// 运行 `~/.claude/skills/ashare-data/.venv/bin/python update_m1m2.py` 重新生成，勿手改。\n"
+    "// 运行 `/Users/xueancao/Projects/QoderProjects/agents-silky/skills/ashare-data/.venv/bin/python update_m1m2.py` 重新生成，勿手改。\n"
     "window.M1M2_DATA = [\n{}\n];\n"
     'window.M1M2_REDEF = "{}"; // M1 口径调整月份（旧口径/新口径分界）\n'
 ).format(MONTHS, body, REDEF)

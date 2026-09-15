@@ -1,5 +1,5 @@
 // 自动生成：近 36 个月货币供应量同比（%）。
-// 运行 `~/.claude/skills/ashare-data/.venv/bin/python update_m1m2.py` 重新生成，勿手改。
+// 运行 `/Users/xueancao/Projects/QoderProjects/agents-silky/skills/ashare-data/.venv/bin/python update_m1m2.py` 重新生成，勿手改。
 window.M1M2_DATA = [
   {"d":"2023-08","m1":2.2,"m2":10.6},
   {"d":"2023-09","m1":2.1,"m2":10.3},
