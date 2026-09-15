@@ -4,7 +4,7 @@
 #   npm start                # 首次自动装依赖 → 起服务 → http://127.0.0.1:5183
 #   PORT=5190 npm start      # 端口被占时换端口
 #
-# 前置：Node ≥ 18（Vite 5 要求）。**不需要 Python** —— 数据文件 public/data.json 随仓库提交。
+# 前置：Node ^20.19.0 || >=22.12.0（Vite 8 要求）。**不需要 Python** —— 数据文件 public/data.json 随仓库提交。
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -12,12 +12,14 @@ PORT="${PORT:-5183}"
 
 # 1) Node 检查
 if ! command -v node >/dev/null 2>&1; then
-  echo "✗ 未找到 node。请先安装 Node 18+（推荐 20/22 LTS）：https://nodejs.org"
+  echo "✗ 未找到 node。请先安装 Node 22 LTS（或 ≥20.19）：https://nodejs.org"
   exit 1
 fi
-NODE_MAJOR="$(node -p 'process.versions.node.split(".")[0]')"
-if [ "${NODE_MAJOR}" -lt 18 ]; then
-  echo "✗ Node 版本过低（当前 $(node -v)）：Vite 5 需要 Node ≥ 18"
+# 与 package.json 的 engines.node 保持一致：^20.19.0 || >=22.12.0
+NODE_OK="$(node -p 'const [maj, min] = process.versions.node.split(".").map(Number);
+  (maj > 22 || (maj === 22 && min >= 12) || (maj === 20 && min >= 19)) ? "1" : "0"')"
+if [ "${NODE_OK}" != "1" ]; then
+  echo "✗ Node 版本过低（当前 $(node -v)）：Vite 8 需要 ^20.19.0 || >=22.12.0"
   exit 1
 fi
 echo "▶ Node $(node -v)｜npm $(npm -v)"
