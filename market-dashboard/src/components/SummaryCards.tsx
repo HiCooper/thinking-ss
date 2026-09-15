@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { latestWith, marginTotalOf, pctChange, bpDiff, prevNonNull, valueLookback, valueOf } from '../calc'
-import { fmtBp, fmtDateCN, fmtInt, fmtNum, fmtPct, trendClass, isNum } from '../format'
+import { fmtBp, fmtDateCN, fmtInt, fmtNum, fmtPct, fmtSigned, trendClass, isNum } from '../format'
 import type { MarketRow } from '../types'
 
 interface SummaryCardsProps {
@@ -15,7 +15,7 @@ interface Metric {
   hint?: string
   /** 主数值的涨跌方向（红涨绿跌） */
   trend?: number | null
-  details: { label: string; text: string; trend?: number | null }[]
+  details: { label: string; text: string; trend?: number | null; title?: string }[]
 }
 
 const dayChangePct = (rows: MarketRow[], key: Parameters<typeof latestWith>[1]) => {
@@ -35,6 +35,17 @@ export default function SummaryCards({ rows }: SummaryCardsProps) {
     const tRow = turnover.cur?.row
     const tIndex = turnover.cur?.index ?? rows.length - 1
     const tPrev = prevNonNull(rows, 'turnover_total', tIndex)
+    // 日变动用**金额（亿元）**表达，并给「放量 / 缩量」措辞
+    // —— 「−168.4 亿」比「−1.03%」直观：一眼看出量级，百分比会随基数漂移
+    const tChangeAmt = (() => {
+      const cur = turnover.cur?.value
+      return isNum(cur) && isNum(tPrev?.value) ? cur - tPrev.value : null
+    })()
+    const tChangeText = (() => {
+      if (!isNum(tChangeAmt)) return '—'
+      if (Math.abs(tChangeAmt) < 0.5) return '持平'
+      return `${tChangeAmt > 0 ? '放量' : '缩量'} ${fmtSigned(tChangeAmt, 1)}亿`
+    })()
 
     // —— 10Y 美债 ——
     const us = latestWith(rows, 'us10y')
@@ -77,10 +88,13 @@ export default function SummaryCards({ rows }: SummaryCardsProps) {
         label: '两市成交额',
         value: fmtInt(turnover.cur?.value),
         unit: '亿元',
-        trend: turnover.diff,
+        trend: tChangeAmt,
         details: [
-          { label: '日变动', text: fmtPct(turnover.diff), trend: turnover.diff },
-          { label: '较前值', text: tPrev ? `${fmtInt(tPrev.value)} 亿元` : '—' },
+          { label: '日变动', text: tChangeText, trend: tChangeAmt, title: '与上一交易日全天成交额之差（交易所官方口径）' },
+          {
+            label: '较前值',
+            text: tPrev ? `${fmtInt(tPrev.value)} 亿元（${fmtPct(turnover.diff)}）` : '—',
+          },
           {
             label: '沪 / 深',
             text: `${fmtInt(valueOf(tRow, 'turnover_sh'))} / ${fmtInt(valueOf(tRow, 'turnover_sz'))}`,
@@ -135,7 +149,7 @@ export default function SummaryCards({ rows }: SummaryCardsProps) {
             {m.details.map((d) => (
               <div className="summary-card__detail" key={d.label}>
                 <dt>{d.label}</dt>
-                <dd className={`num ${trendClass(d.trend)}`}>{d.text}</dd>
+                <dd className={`num ${trendClass(d.trend)}`} title={d.title}>{d.text}</dd>
               </div>
             ))}
           </dl>
