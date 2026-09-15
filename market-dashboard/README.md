@@ -202,6 +202,18 @@ market-dashboard/
     └── components/CrossMarketChart.tsx       # 图 5 跨市场科技情绪（科创50 vs KOSPI）
 ```
 
+## 已知依赖告警（`npm audit`）
+
+`npm ci` 会报 3 条，**均未强制修复**（`npm audit fix --force` 会跨主版本、可能直接改坏看板）：
+
+| 包 | 级别 | 问题 | 为何暂不修 | 何时修 |
+|---|---|---|---|---|
+| `vite` | high | 优化依赖 `.map` 处理的路径穿越（GHSA-4w7w-66w2-5vf9） | 只影响 **dev / preview 服务**，且本项目 `host` 固定 `127.0.0.1`，不对外监听；修复需跨主版本（vite 5 → 7+） | 单独开一次升级 + 回归五图 |
+| `esbuild` | moderate | dev server 可被**同一浏览器**里的任意网站读写 | 同上（dev-only、仅本机回环） | 随 vite 升级一并解决 |
+| `echarts` | moderate | XSS（GHSA-fgmj-fm8m-jvvx） | 图表数据**全部来自本项目自己的** `data.json` / `/api/spot`，无用户输入；修复需 echarts 6（破坏性 API 变更） | 升级时逐图回归 |
+
+> ⚠️ 如果哪天把 `host` 改成 `0.0.0.0`（为了让别的设备访问），前两条 **dev-server 告警的风险会显著上升** —— 那种场景请先把 vite 升上去。
+
 ## 边界与已知限制
 
 - **北交所未纳入成交额历史**（口径为沪深两市）；实时面板里用「北证50」单列。
