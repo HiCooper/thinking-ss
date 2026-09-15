@@ -112,28 +112,6 @@ export default function LiveStrip() {
       ) : (
         <>
           <div className="live-grid">
-            <div className="live-tile live-tile--amount">
-              <div className="live-tile__label">两市成交额合计</div>
-              <div className="live-tile__value num">
-                {fmtNum(cn?.total ?? null, 1)}
-                <span className="live-tile__unit">亿元</span>
-              </div>
-              <dl className="live-tile__parts">
-                <div>
-                  <dt>沪市</dt>
-                  <dd className="num">{fmtNum(cn?.sh ?? null, 1)}</dd>
-                </div>
-                <div>
-                  <dt>深市</dt>
-                  <dd className="num">{fmtNum(cn?.sz ?? null, 1)}</dd>
-                </div>
-                <div>
-                  <dt>北证50</dt>
-                  <dd className="num">{fmtNum(cn?.bj50 ?? null, 1)}</dd>
-                </div>
-              </dl>
-            </div>
-
             <QuoteTile
               label="富时中国 A50（期货）"
               price={a50?.price ?? null}

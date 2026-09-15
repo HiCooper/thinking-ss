@@ -337,7 +337,8 @@
 
 .live-grid {
   display: grid;
-  grid-template-columns: 1.6fr repeat(3, minmax(0, 1fr));
+  /* 只剩三张跨市场报价卡（成交额已并入上方摘要卡，不再重复展示）→ 三等分 */
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
 }
 
@@ -415,42 +416,11 @@
   color: var(--down);
 }
 
-.live-tile__unit {
-  font-family: var(--font-sans);
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--text-muted);
-}
-
 .live-tile__chg {
   font-size: 13px;
   font-weight: 600;
   flex: 0 0 auto;
   white-space: nowrap;
-}
-
-.live-tile__parts {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding-top: 6px;
-  border-top: 1px dashed var(--border);
-}
-
-.live-tile__parts > div {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 8px;
-  font-size: 12px;
-}
-
-.live-tile__parts dt {
-  color: var(--text-muted);
-}
-
-.live-tile__parts dd {
-  font-weight: 600;
 }
 
 .live-indices {
