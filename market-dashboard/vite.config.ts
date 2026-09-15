@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
-import { localApi } from './plugin/localApi'
+// 注意：这里必须带 .ts 扩展名 —— vite 8 起 config 的 native loader 要求显式扩展名
+import { localApi } from './plugin/localApi.ts'
 
 // 手工维护的最小 Vite 配置（未使用 `npm create vite`）。
 // 端口：默认 5183，可用环境变量覆盖（换机器时 5183 可能被占）：PORT=5190 npm start
