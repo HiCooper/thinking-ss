@@ -7,12 +7,14 @@ interface ChartCardProps {
   subtitle?: string
   /** 右上角附加信息，例如单位说明 */
   meta?: ReactNode
+  /** 追加到 .chart-card 上的类名，用于两列网格里跨列（chart-card--wide）等布局 */
+  className?: string
   children: ReactNode
 }
 
-export default function ChartCard({ index, title, subtitle, meta, children }: ChartCardProps) {
+export default function ChartCard({ index, title, subtitle, meta, className, children }: ChartCardProps) {
   return (
-    <section className="card chart-card">
+    <section className={className ? `card chart-card ${className}` : 'card chart-card'}>
       <header className="chart-card__head">
         <div className="chart-card__title-wrap">
           <h2 className="chart-card__title">

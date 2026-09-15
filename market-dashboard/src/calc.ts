@@ -101,3 +101,20 @@ export function marginTotalOf(row: MarketRow | undefined): number | null {
   if (!isNum(rz) && !isNum(rq)) return null
   return (isNum(rz) ? rz : 0) + (isNum(rq) ? rq : 0)
 }
+
+/** 整列是否至少有一个有效值（用于「该序列不可用」的降级提示）。 */
+export function hasAnyValue(values: (number | null)[]): boolean {
+  return values.some((v) => isNum(v))
+}
+
+/**
+ * 区间归一化：以**第一个有效值 = 100** 换算成相对指数，用于跨市场同轴比较
+ * （点位量级不同的序列，比如科创50 与 KOSPI）。
+ * - 首个有效值之前的点位保持 null（不连线、不参与）
+ * - 整列无有效值、或基准为 0 时返回全 null（由调用方给出「序列不可用」提示）
+ */
+export function normalizeTo100(values: (number | null)[]): (number | null)[] {
+  const base = values.find((v) => isNum(v))
+  if (!isNum(base) || base === 0) return values.map(() => null)
+  return values.map((v) => (isNum(v) ? (v / base) * 100 : null))
+}

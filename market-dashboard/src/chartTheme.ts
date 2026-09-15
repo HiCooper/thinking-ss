@@ -8,6 +8,14 @@ export const C = {
   cn10y: '#2471a3',
   marginRz: '#c0392b',
   marginRq: '#2471a3',
+  /** 图 4：杠杆率（融资余额/流通市值） */
+  rzRatio: '#c0392b',
+  /** 图 4：换手率（成交额/流通市值） */
+  turnoverRatio: '#1f7a5c',
+  /** 图 5：科创50 */
+  star50: '#8e5bb5',
+  /** 图 5：韩国 KOSPI */
+  kospi: '#d97706',
   axisLine: '#dfe3e9',
   splitLine: '#eef1f5',
   axisLabel: '#7a8699',
@@ -153,6 +161,28 @@ export function ttDivider(): string {
 
 /** 数据点没有值时显示占位，避免出现 "null"。 */
 export const TT_EMPTY = '—'
+
+/**
+ * 图内文字提示（ECharts graphic 组件）。
+ * 某条序列整列都是 null 时，画一张空图比不画更容易误导，所以在图里直接写明「不可用」。
+ */
+export function graphicNotice(
+  text: string,
+  place: 'center' | 'topRight' = 'center',
+): Record<string, unknown>[] {
+  const style = {
+    text,
+    fill: '#8b96a6',
+    fontSize: 12.5,
+    lineHeight: 20,
+  }
+  if (place === 'topRight') {
+    return [{ type: 'text', silent: true, z: 100, right: 18, top: 32, style: { ...style, textAlign: 'right' } }]
+  }
+  return [
+    { type: 'text', silent: true, z: 100, left: 'center', top: 'middle', style: { ...style, textAlign: 'center' } },
+  ]
+}
 
 /** ECharts formatter 回调参数的最小结构（避免依赖内部类型）。 */
 export interface TooltipItem {

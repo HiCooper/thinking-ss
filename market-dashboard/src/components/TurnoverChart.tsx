@@ -144,7 +144,7 @@ export default function TurnoverChart({ rows }: { rows: MarketRow[] }) {
         </span>
         <span className="muted">null 不参与均值计算，也不连线（connectNulls: false）</span>
       </div>
-      <EChart option={option} height={400} ariaLabel="两市总成交额走势图" />
+      <EChart option={option} height={340} ariaLabel="两市总成交额走势图" />
     </>
   )
 }

@@ -133,7 +133,7 @@ export default function MarginChart({ rows }: { rows: MarketRow[] }) {
           两轴刻度独立缩放，请分别按对应轴读数。
         </span>
       </div>
-      <EChart option={option} height={360} ariaLabel="融资融券余额走势图（双 y 轴）" />
+      <EChart option={option} height={340} ariaLabel="融资融券余额走势图（双 y 轴）" />
     </>
   )
 }

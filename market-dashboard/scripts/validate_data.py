@@ -12,12 +12,18 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "public" / "data.json"
 
-NUM_KEYS = ["turnover_sh", "turnover_sz", "turnover_total",
-            "us10y", "cn10y", "margin_rz", "margin_rq", "margin_total"]
+NUM_KEYS = ["turnover_sh", "turnover_sz", "turnover_total", "float_mktcap",
+            "turnover_ratio", "us10y", "cn10y",
+            "margin_rz", "margin_rq", "margin_total", "margin_rz_ratio",
+            "kospi", "star50"]
 RANGES = {                      # (下限, 上限) 用于捕捉单位错误（万元/元 误当 亿元 之类的量级错）
     "turnover_sh": (500, 60000), "turnover_sz": (500, 60000), "turnover_total": (1000, 100000),
     "us10y": (-2, 20), "cn10y": (-2, 20),
     "margin_rz": (3000, 60000), "margin_rq": (0, 5000), "margin_total": (3000, 60000),
+    "float_mktcap": (50000, 5000000),     # 沪深流通市值，亿元（约百万亿量级）
+    "turnover_ratio": (0, 20),            # 全市场换手率 %
+    "margin_rz_ratio": (0, 20),           # 杠杆率 %
+    "kospi": (1000, 20000), "star50": (200, 10000),
 }
 MIN_ROWS = 60
 
@@ -64,11 +70,21 @@ def main() -> int:
         if len(nums) < len(rows) * 0.5:
             warns.append(f"{key} 仅 {len(nums)}/{len(rows)} 天有值（缺失超过一半），确认是否符合预期")
 
-    # 一致性：合计 ≈ 沪 + 深
+    # 一致性：合计 ≈ 沪 + 深；派生比率 ≈ 分子/分母
     for r in rows:
         sh, sz, tt = r.get("turnover_sh"), r.get("turnover_sz"), r.get("turnover_total")
         if None not in (sh, sz, tt) and abs((sh + sz) - tt) > 1.0:
             errs.append(f"{r['date']} 成交额合计 ≠ 沪+深（{tt} vs {sh}+{sz}）")
+            break
+    for r in rows:
+        cap, tt, ratio = r.get("float_mktcap"), r.get("turnover_total"), r.get("turnover_ratio")
+        if None not in (cap, tt, ratio) and abs(tt / cap * 100 - ratio) > 0.05:
+            errs.append(f"{r['date']} turnover_ratio 与 成交额/流通市值 不一致（{ratio} vs {tt / cap * 100:.3f}）")
+            break
+    for r in rows:
+        cap, rz, ratio = r.get("float_mktcap"), r.get("margin_rz"), r.get("margin_rz_ratio")
+        if None not in (cap, rz, ratio) and abs(rz / cap * 100 - ratio) > 0.05:
+            errs.append(f"{r['date']} margin_rz_ratio 与 融资余额/流通市值 不一致（{ratio} vs {rz / cap * 100:.3f}）")
             break
 
     print(f"文件：{DATA}")

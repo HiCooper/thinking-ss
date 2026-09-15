@@ -179,7 +179,281 @@
   text-overflow: ellipsis;
 }
 
+/* ============================ 实时面板 ============================ */
+.live-strip {
+  padding: 14px 16px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.live-strip__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.live-strip__title {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+}
+
+.live-strip__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--up);
+  box-shadow: 0 0 0 3px rgba(217, 52, 43, 0.12);
+  animation: live-pulse 2.4s ease-in-out infinite;
+}
+
+@keyframes live-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.3;
+  }
+}
+
+.live-strip__session {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: #eef2f7;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.live-strip__session--open {
+  color: #a02a22;
+  background: #fdeceb;
+  border-color: #f3c9c6;
+}
+
+.live-strip__session--lunch {
+  color: #8a6d1f;
+  background: #fdf5e2;
+  border-color: #f0dfb4;
+}
+
+.live-strip__session--pre {
+  color: #1f4f7a;
+  background: #eaf2fa;
+  border-color: #cfe0f0;
+}
+
+.live-strip__sub {
+  margin-top: 5px;
+  font-size: 12px;
+  color: var(--text-muted);
+  max-width: 82ch;
+}
+
+.live-strip__controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.live-strip__ts {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  margin-right: 2px;
+}
+
+.live-strip__fallback {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.live-strip__notice {
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: #8a6d1f;
+  background: #fdfaf1;
+  border: 1px dashed #f0dfb4;
+  border-radius: var(--radius-sm);
+  padding: 9px 12px;
+}
+
+.live-strip__notice-detail,
+.live-strip__errors {
+  font-size: 11.5px;
+  line-height: 1.65;
+}
+
+.live-grid {
+  display: grid;
+  grid-template-columns: 1.6fr repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.live-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  padding: 10px 12px;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.live-tile__label {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.live-tile__time {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.live-tile__value {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+  line-height: 1.2;
+}
+
+/* 数值行：左侧数值、右侧迷你图。行高由 22px 字号决定（≈26px）＞ 20px 迷你图，
+   因此加图不会改变卡片高度；迷你图只吃剩余宽度，不参与纵向布局。 */
+.live-tile__value-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.live-tile__value-row .live-tile__value {
+  flex: 0 1 auto;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.live-spark {
+  flex: 1 1 56px;
+  min-width: 0;
+  max-width: 120px;
+  height: 20px;
+  display: block;
+  overflow: hidden;
+}
+
+.live-spark--up {
+  color: var(--up);
+}
+
+.live-spark--down {
+  color: var(--down);
+}
+
+.live-tile__unit {
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.live-tile__chg {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.live-tile__parts {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-top: 6px;
+  border-top: 1px dashed var(--border);
+}
+
+.live-tile__parts > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.live-tile__parts dt {
+  color: var(--text-muted);
+}
+
+.live-tile__parts dd {
+  font-weight: 600;
+}
+
+.live-indices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  margin: 0;
+  padding: 9px 0 0;
+  border-top: 1px dashed var(--border);
+  list-style: none;
+}
+
+.live-index {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  font-size: 12px;
+}
+
+.live-index__name {
+  color: var(--text-secondary);
+}
+
+.live-index__price,
+.live-index__chg {
+  font-weight: 600;
+}
+
 /* ============================ 图表卡 ============================ */
+
+/* 两列网格：图1｜图2 / 图3｜图4 / 图5 跨两列。
+   align-items: stretch 让同一行两张卡片等高，避免高度参差留下空洞。 */
+.chart-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: stretch;
+  gap: 16px;
+}
+
+.chart-grid > .chart-card {
+  min-width: 0;
+}
+
+.chart-card--wide {
+  grid-column: span 2;
+}
+
 .chart-card {
   padding: 14px 18px 18px;
 }
@@ -367,6 +641,47 @@ code {
   background: #172c49;
 }
 
+.btn:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+/* 小型工具按钮（实时面板的控制条）：默认浅灰幽灵样式 */
+.btn--mini {
+  margin-top: 0;
+  padding: 4px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+}
+
+.btn--mini:hover {
+  background: #eef2f7;
+}
+
+.btn--mini-off {
+  color: #8a6d1f;
+  background: #fdf5e2;
+  border-color: #f0dfb4;
+}
+
+.btn--mini-off:hover {
+  background: #fbf0d8;
+}
+
+.btn--mini-primary {
+  color: #fff;
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.btn--mini-primary:hover {
+  background: #2b4d78;
+}
+
 .spinner {
   width: 26px;
   height: 26px;
@@ -401,6 +716,19 @@ code {
   .summary-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .live-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  /* < 1080px：图表回落为单列（每图一行），图 5 不再跨列 */
+  .chart-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .chart-card--wide {
+    grid-column: auto;
+  }
 }
 
 @media (max-width: 640px) {
@@ -410,6 +738,18 @@ code {
 
   .summary-grid {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .live-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .live-strip__controls {
+    width: 100%;
+  }
+
+  .live-tile__value {
+    font-size: 20px;
   }
 
   .topbar {

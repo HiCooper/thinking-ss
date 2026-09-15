@@ -7,6 +7,7 @@ import * as echarts from 'echarts/core'
 import { LineChart } from 'echarts/charts'
 import {
   DataZoomComponent, // inside + slider 两种 dataZoom
+  GraphicComponent, // 图内文字提示（序列整列不可用时）
   GridComponent,
   LegendComponent,
   TooltipComponent,
@@ -19,6 +20,7 @@ echarts.use([
   TooltipComponent,
   LegendComponent,
   DataZoomComponent,
+  GraphicComponent,
   CanvasRenderer,
 ])
 
