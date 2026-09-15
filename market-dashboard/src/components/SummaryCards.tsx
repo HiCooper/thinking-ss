@@ -102,19 +102,6 @@ export default function SummaryCards({ rows }: SummaryCardsProps) {
         ],
       },
       {
-        key: 'us10y',
-        label: '10Y 美债',
-        value: fmtNum(us?.value, 2),
-        unit: '%',
-        trend: usDiffBp,
-        hint: us ? us.row.date : undefined,
-        details: [
-          { label: '日变动', text: fmtBp(usDiffBp), trend: usDiffBp },
-          { label: '中美利差', text: isNum(spread) ? `${fmtNum(spread, 0)}bp` : '—', trend: spread },
-          { label: '10Y 中债', text: isNum(cnAtUs) ? `${fmtNum(cnAtUs, 2)}%` : '—' },
-        ],
-      },
-      {
         key: 'margin',
         label: '两融余额',
         value: fmtInt(mCur),
@@ -128,6 +115,19 @@ export default function SummaryCards({ rows }: SummaryCardsProps) {
             trend: pctChange(mCur, mBase20),
           },
           { label: '融资 / 融券', text: `${fmtInt(rz)} / ${fmtInt(rq)}` },
+        ],
+      },
+      {
+        key: 'us10y',
+        label: '10Y 美债',
+        value: fmtNum(us?.value, 2),
+        unit: '%',
+        trend: usDiffBp,
+        hint: us ? us.row.date : undefined,
+        details: [
+          { label: '日变动', text: fmtBp(usDiffBp), trend: usDiffBp },
+          { label: '中美利差', text: isNum(spread) ? `${fmtNum(spread, 0)}bp` : '—', trend: spread },
+          { label: '10Y 中债', text: isNum(cnAtUs) ? `${fmtNum(cnAtUs, 2)}%` : '—' },
         ],
       },
     ]
