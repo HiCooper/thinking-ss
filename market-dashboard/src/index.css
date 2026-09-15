@@ -1,0 +1,95 @@
+/* ---------------- 设计令牌：专业金融终端（浅色） ---------------- */
+:root {
+  --bg: #f2f4f7;
+  --bg-elevated: #ffffff;
+  --bg-subtle: #f8fafc;
+  --border: #e2e6ec;
+  --border-strong: #d3d9e2;
+
+  --text: #1b2735;
+  --text-secondary: #48566b;
+  --text-muted: #8b96a6;
+
+  --accent: #1f3a5f;
+  --up: #d9342b; /* A 股：红涨 */
+  --down: #129c62; /* A 股：绿跌 */
+  --flat: #6b7688;
+
+  --radius: 6px;
+  --radius-sm: 4px;
+  --shadow: 0 1px 2px rgba(19, 34, 56, 0.04), 0 1px 8px rgba(19, 34, 56, 0.04);
+
+  --font-sans: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Hiragino Sans GB',
+    'Microsoft YaHei', 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono',
+    'Courier New', monospace;
+
+  color-scheme: light;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+h1,
+h2,
+h3,
+p,
+dl,
+dd,
+figure {
+  margin: 0;
+}
+
+button {
+  font-family: inherit;
+}
+
+code,
+pre {
+  font-family: var(--font-mono);
+}
+
+/* 所有数字统一等宽 + 表格数字对齐 */
+.num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1, 'zero' 1;
+}
+
+.muted {
+  color: var(--text-muted);
+}
+
+/* 涨跌配色（A 股习惯：红涨绿跌） */
+.trend-up {
+  color: var(--up);
+}
+.trend-down {
+  color: var(--down);
+}
+.trend-flat {
+  color: var(--flat);
+}
