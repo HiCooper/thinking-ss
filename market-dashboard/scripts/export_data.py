@@ -27,9 +27,32 @@ from pathlib import Path
 
 warnings.filterwarnings("ignore")
 
-import akshare as ak
-import pandas as pd
-import requests
+# 第三方依赖**延迟导入**：--offline 只用仓库里的缓存，不需要 akshare/pandas/requests。
+# 这样「换一台机器、没装 akshare」也能纯离线重建 data.json。
+try:
+    import requests
+except ImportError:                      # pragma: no cover
+    requests = None
+try:
+    import pandas as pd
+except ImportError:                      # pragma: no cover
+    pd = None
+try:
+    import akshare as ak
+except ImportError:                      # pragma: no cover
+    ak = None
+
+_MISSING_HINT = """✗ 缺少第三方依赖「{mod}」——只有**联网更新数据**才需要它。
+  任选其一：
+    · npm run data:setup                    # 在项目下建 .venv-data 并安装 akshare/pandas/requests
+    · npm run data:refresh -- --offline      # 纯用仓库里的本地缓存重建（不需要任何第三方依赖）
+    · DASH_PY=/path/to/python npm run data:refresh"""
+
+
+def _require(mod, obj):
+    if obj is None:
+        print(_MISSING_HINT.format(mod=mod), file=sys.stderr)
+        sys.exit(1)
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "public" / "data.json"
@@ -61,6 +84,7 @@ def save_json(path, obj):
 # ---------------- 交易日历 ----------------
 def tx_daily(symbol, n):
     """腾讯日 K → [(日期, 收盘), ...]。"""
+    _require("requests", requests)
     url = f"https://web.ifzq.gtimg.cn/appstock/app/kline/kline?param={symbol},day,,,{n + 60}"
     r = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=20).json()
     return [(x[0], float(x[2])) for x in r["data"][symbol]["day"]]
@@ -114,6 +138,7 @@ def series_with_cache(sc, key, label, fetcher, offline):
 # ---------------- 逐日官方：成交额 + 流通市值 ----------------
 def official_one(date):
     """→ (沪成交亿, 深成交亿, 沪流通市值亿, 深流通市值亿)。"""
+    _require("akshare", ak)
     d = date.replace("-", "")
     sse = ak.stock_sse_deal_daily(date=d)
     pick = lambda row: float(sse.loc[sse["单日情况"] == row, "股票"].iloc[0])
@@ -155,12 +180,16 @@ def build_official(days, cache, offline):
 
 # ---------------- 各序列抓取器（均返回 {date: value}） ----------------
 def fetch_sina_bond(symbol):
+    _require("requests", requests)
     data = requests.get(f"https://bond.finance.sina.com.cn/hq/gb/daily?symbol={symbol}",
                         headers=UA, timeout=20).json()["result"]["data"]
     return {x["d"]: float(x["c"]) for x in data}
 
 
 def fetch_margin(field):
+    _require("akshare", ak)
+    _require("pandas", pd)
+
     def side(df):
         df = df[["日期", field]].copy()
         df["日期"] = pd.to_datetime(df["日期"]).dt.strftime("%Y-%m-%d")
@@ -174,6 +203,8 @@ def fetch_margin(field):
 
 def fetch_kospi():
     """新浪全球指数（gi.finance.sina.com.cn）；东财 index_global_hist_em 走 push2his 会被代理挡，仅兜底。"""
+    _require("akshare", ak)
+    _require("pandas", pd)
     try:
         df = ak.index_global_hist_sina(symbol="首尔综合指数")
         dates, closes = df["date"], df["close"]
