@@ -423,30 +423,47 @@
   white-space: nowrap;
 }
 
+/* ================= 指数信息条（固定在屏幕顶部 / 铺满 100% 宽） ================= */
+/* 由 LiveStrip 用 portal 渲染进 index.html 的 #ticker-root —— 它是 body 的子元素，
+   所以 sticky 对「整页滚动」生效（若留在面板卡片内，会被卡片盒子限制住而几乎不吸顶）。 */
+#ticker-root {
+  position: sticky;
+  top: 0;
+  z-index: 30;                    /* 低于右上角 toast(40)，避免遮挡提示 */
+  background: var(--bg-elevated);
+  border-bottom: 1px solid var(--border);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 4%);
+}
+
 .live-indices {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px 18px;
-  margin: 0;
-  padding: 9px 0 0;
-  border-top: 1px dashed var(--border);
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));   /* 5 等列；窄屏在断点里降为 3 / 2 列 */
+  gap: 6px 14px;
+  max-width: 1320px;              /* 与 .app 同宽，内部与下方卡片左右对齐 */
+  margin: 0 auto;
+  padding: 8px 20px;
   list-style: none;
 }
 
+/* 每格内部：名称靠左、价格与涨跌幅靠右（两端对齐） */
 .live-index {
   display: flex;
   align-items: baseline;
+  justify-content: space-between;
   gap: 7px;
+  min-width: 0;
   font-size: 12px;
 }
 
 .live-index__name {
   color: var(--text-secondary);
+  white-space: nowrap;
 }
 
 .live-index__price,
 .live-index__chg {
   font-weight: 600;
+  white-space: nowrap;
 }
 
 /* ============================ 图表卡 ============================ */
@@ -735,6 +752,10 @@ code {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .live-indices {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
   /* < 1080px：图表回落为单列（每图一行），图 5 不再跨列 */
   .chart-grid {
     grid-template-columns: minmax(0, 1fr);
@@ -756,6 +777,10 @@ code {
 
   .live-grid {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .live-indices {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .live-strip__controls {

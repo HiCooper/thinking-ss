@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { fetchSpot } from '../api'
 import { fmtNum, fmtPct, trendClass } from '../format'
 import Sparkline from './Sparkline'
@@ -8,6 +9,10 @@ import type { SparkSeries, SpotData } from '../types'
 const REFRESH_MS = 30_000
 
 type Status = 'loading' | 'ready' | 'unavailable'
+
+/** 指数信息条的挂载点（index.html 里 #root 之前的 #ticker-root，配合 sticky 固定在屏幕顶部）。 */
+const tickerHost = (): HTMLElement | null =>
+  typeof document === 'undefined' ? null : document.getElementById('ticker-root')
 
 /**
  * 实时面板：挂在摘要卡上方，展示两市成交额 / A50 / KOSPI / KOSDAQ。
@@ -63,6 +68,25 @@ export default function LiveStrip() {
   const kospi = data?.korea?.kospi ?? null
   const session = data?.session
 
+  // 指数信息条：portal 到 #ticker-root（sticky 钉在屏幕顶部）。容器缺失时退化为原地渲染，
+  // 这样即使 index.html 的挂载点被改动，功能也不会丢。
+  const host = tickerHost()
+  const indexBar =
+    cn && cn.indices.length > 0 ? (
+      <ul className="live-indices">
+        {cn.indices.map((ix) => (
+          <li className="live-index" key={ix.code}>
+            <span className="live-index__name">{ix.name}</span>
+            <span className="live-index__price num">{fmtNum(ix.price, 2)}</span>
+            <span className={`live-index__chg num ${trendClass(ix.chg_pct)}`}>
+              {fmtPct(ix.chg_pct)}
+            </span>
+          </li>
+        ))}
+      </ul>
+    ) : null
+  const ticker = indexBar && host ? createPortal(indexBar, host) : indexBar
+
   return (
     <section className="card live-strip">
       <header className="live-strip__head">
@@ -111,6 +135,11 @@ export default function LiveStrip() {
         <p className="live-strip__notice">正在读取 /api/spot …</p>
       ) : (
         <>
+          {/* 指数信息条：不在面板内渲染 —— portal 到 #ticker-root（body 直属），
+              由 position:sticky 固定在屏幕顶部、铺满 100% 宽；窄屏降为 3/2 列。
+              面板内不再占位，故这里只渲染三张跨市场卡。 */}
+          {ticker}
+
           <div className="live-grid">
             <QuoteTile
               label="富时中国 A50（期货）"
@@ -139,20 +168,6 @@ export default function LiveStrip() {
               spark={data?.spark.nq ?? null}
             />
           </div>
-
-          {cn && cn.indices.length > 0 ? (
-            <ul className="live-indices">
-              {cn.indices.map((ix) => (
-                <li className="live-index" key={ix.code}>
-                  <span className="live-index__name">{ix.name}</span>
-                  <span className="live-index__price num">{fmtNum(ix.price, 2)}</span>
-                  <span className={`live-index__chg num ${trendClass(ix.chg_pct)}`}>
-                    {fmtPct(ix.chg_pct)}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          ) : null}
 
           {data && data.errors.length > 0 ? (
             <p className="live-strip__errors muted">部分子项抓取失败：{data.errors.join('；')}</p>
