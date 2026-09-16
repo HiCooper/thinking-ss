@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import './App.css'
 import Dashboard from './components/Dashboard'
+import HoldingsBoard from './components/HoldingsBoard'
 import { DataMissingError, fetchDataVersion, fetchMarketData } from './api'
 import type { MarketData } from './types'
 
@@ -9,6 +10,22 @@ const VERSION_POLL_MS = 30_000
 /** 「数据已更新」提示的停留时间（随后淡出）。 */
 const TOAST_MS = 2600
 
+/** 两个看板共用同一套外壳，用顶部标签切换。 */
+type View = 'market' | 'holdings'
+
+const VIEW_META: Record<View, { title: string; sub: string; sources: string }> = {
+  market: {
+    title: '大盘看板',
+    sub: 'A 股市场情绪与流动性',
+    sources: '',
+  },
+  holdings: {
+    title: '我的持仓看板',
+    sub: '持仓结构、盈亏与回本缺口',
+    sources: '份额与成本来自仓库根目录 holdings.md（脚本导出）· 现价来自新浪财经 hq.sinajs.cn（本地接口代理）',
+  },
+}
+
 type ViewState =
   | { status: 'loading' }
   | { status: 'ready'; data: MarketData }
@@ -16,6 +33,7 @@ type ViewState =
   | { status: 'error'; message: string }
 
 export default function App() {
+  const [view, setView] = useState<View>('market')
   const [state, setState] = useState<ViewState>({ status: 'loading' })
   const [reloadKey, setReloadKey] = useState(0)
   const [toast, setToast] = useState<string | null>(null)
@@ -100,6 +118,7 @@ export default function App() {
   }, [toast])
 
   const data = state.status === 'ready' ? state.data : null
+  const meta = VIEW_META[view]
 
   return (
     <div className="app">
@@ -112,33 +131,55 @@ export default function App() {
       <header className="topbar">
         <div className="topbar__brand">
           <span className="topbar__dot" aria-hidden="true" />
-          <h1 className="topbar__title">大盘看板</h1>
-          <span className="topbar__sub">A 股市场情绪与流动性</span>
+          <h1 className="topbar__title">{meta.title}</h1>
+          <span className="topbar__sub">{meta.sub}</span>
         </div>
-        <div className="topbar__meta">
-          <span className="topbar__meta-label">数据生成时间</span>
-          <span className="topbar__meta-value num">{data ? data.generated_at : '—'}</span>
-        </div>
+        {/* 大盘看板显示 data.json 的生成时间；持仓看板的时间信息在板块标题里，这里留空 */}
+        {view === 'market' ? (
+          <div className="topbar__meta">
+            <span className="topbar__meta-label">数据生成时间</span>
+            <span className="topbar__meta-value num">{data ? data.generated_at : '—'}</span>
+          </div>
+        ) : null}
       </header>
+
+      <nav className="viewtabs" aria-label="看板切换">
+        {(['market', 'holdings'] as const).map((v) => (
+          <button
+            key={v}
+            type="button"
+            className={`viewtab${view === v ? ' viewtab--active' : ''}`}
+            aria-current={view === v ? 'page' : undefined}
+            onClick={() => setView(v)}
+          >
+            {VIEW_META[v].title}
+          </button>
+        ))}
+      </nav>
 
       <p className="topbar__sources">
         <span className="topbar__sources-label">数据来源</span>
-        {data?.sources ? data.sources : '—'}
+        {view === 'market' ? (data?.sources ? data.sources : '—') : meta.sources}
       </p>
 
       <main className="content">
-        {state.status === 'loading' ? <LoadingView /> : null}
-        {state.status === 'empty' ? (
-          <EmptyView title={state.title} detail={state.detail} onRetry={() => setReloadKey((k) => k + 1)} />
+        {view === 'holdings' ? <HoldingsBoard /> : null}
+        {view === 'market' ? (
+          <>
+            {state.status === 'loading' ? <LoadingView /> : null}
+            {state.status === 'empty' ? (
+              <EmptyView title={state.title} detail={state.detail} onRetry={() => setReloadKey((k) => k + 1)} />
+            ) : null}
+            {state.status === 'error' ? (
+              <ErrorView message={state.message} onRetry={() => setReloadKey((k) => k + 1)} />
+            ) : null}
+            {state.status === 'ready' ? <Dashboard data={state.data} /> : null}
+          </>
         ) : null}
-        {state.status === 'error' ? (
-          <ErrorView message={state.message} onRetry={() => setReloadKey((k) => k + 1)} />
-        ) : null}
-        {state.status === 'ready' ? <Dashboard data={state.data} /> : null}
       </main>
 
       <footer className="footer">
-        <span>market-dashboard · 纯前端渲染，数据全部来自运行时读取的 /data.json，页面不内置任何行情数据。</span>
+        <span>market-dashboard · 纯前端渲染，行情数据全部运行时读取，页面不内置任何行情数值。</span>
         <span className="muted">单位：金额 亿元 · 收益率 % · 涨跌沿用 A 股习惯（红涨绿跌）</span>
       </footer>
     </div>

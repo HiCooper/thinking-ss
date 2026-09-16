@@ -7,7 +7,7 @@
     <title>大盘看板 · A股市场情绪与流动性</title>
   </head>
   <body>
-    <!-- 指数信息条挂载点：位于 #root 之前 + position:sticky，实现「固定在屏幕顶部」 -->
+    <!-- 指数信息条挂载点：配合 position:fixed;bottom:0 实现「固定在屏幕底部」 -->
     <div id="ticker-root"></div>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>

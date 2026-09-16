@@ -475,16 +475,27 @@
   white-space: nowrap;
 }
 
-/* ================= 指数信息条（固定在屏幕顶部 / 铺满 100% 宽） ================= */
-/* 由 LiveStrip 用 portal 渲染进 index.html 的 #ticker-root —— 它是 body 的子元素，
-   所以 sticky 对「整页滚动」生效（若留在面板卡片内，会被卡片盒子限制住而几乎不吸顶）。 */
+/* ================= 指数信息条（固定在屏幕底部 / 铺满 100% 宽） ================= */
+/* 由 LiveStrip 用 portal 渲染进 index.html 的 #ticker-root。
+   这里用 position:fixed 而不是 sticky —— 元素在 body 里位于 #root **之前**，
+   sticky 的 bottom:0 对「静态位置在页首」的元素不生效（sticky 只能朝滚动方向推开，
+   该元素永远不会落到视口下沿之外），所以固定底栏必须脱离文档流。 */
 #ticker-root {
-  position: sticky;
-  top: 0;
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
   z-index: 30;                    /* 低于右上角 toast(40)，避免遮挡提示 */
   background: var(--bg-elevated);
-  border-bottom: 1px solid var(--border);
-  box-shadow: 0 1px 2px rgb(0 0 0 / 4%);
+  border-top: 1px solid var(--border);
+  box-shadow: 0 -1px 3px rgb(0 0 0 / 6%);
+}
+
+/* fixed 元素脱离文档流，页面底部要留出等高空间，否则页脚会被底栏盖住。
+   用 :has() 只在指数条**真的渲染出来**时才留白（持仓看板没有这条，不该多出空白）；
+   浏览器不支持 :has() 时该规则整条忽略，后果仅是页脚被盖住一部分，不会错位。 */
+body:has(#ticker-root > *) .app {
+  padding-bottom: 72px;
 }
 
 .live-indices {
@@ -493,7 +504,7 @@
   gap: 6px 14px;
   max-width: 1320px;              /* 与 .app 同宽，内部与下方卡片左右对齐 */
   margin: 0 auto;
-  padding: 8px 20px;
+  padding: 8px 20px calc(8px + env(safe-area-inset-bottom));   /* 避开 iOS 底部横条 */
   list-style: none;
 }
 
@@ -865,5 +876,285 @@ code {
 
   .footnote {
     text-align: left;
+  }
+}
+
+/* ============================ 顶部视图切换（大盘 / 我的持仓） ============================ */
+.viewtabs {
+  display: flex;
+  gap: 4px;
+  margin-top: 14px;
+  border-bottom: 1px solid var(--border-strong);
+}
+
+.viewtab {
+  position: relative;
+  margin-bottom: -1px;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.viewtab:hover {
+  color: var(--text-secondary);
+}
+
+.viewtab--active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+/* 板块圆点：默认灰＝静态日频；--live 为红＝有实时数据在刷新 */
+.section-head__dot--live {
+  background: var(--up);
+  box-shadow: 0 0 0 3px rgba(217, 52, 43, 0.12);
+}
+
+/* ============================ 持仓看板 ============================ */
+.holdings-notice {
+  margin: 0 0 10px;
+  padding: 8px 12px;
+  font-size: 12px;
+  line-height: 1.6;
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+}
+
+.holdings-notice--warn {
+  background: #fdf5e2;
+  border-color: #f0dfb4;
+  color: #8a6d1f;
+}
+
+.holdings-notice code {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+}
+
+/* tag 叠涨跌色：两类的选择器要显式写，否则会被 .tag 的颜色覆盖 */
+.tag.trend-up {
+  color: var(--up);
+  border-color: rgba(217, 52, 43, 0.28);
+  background: rgba(217, 52, 43, 0.07);
+}
+
+.tag.trend-down {
+  color: var(--down);
+  border-color: rgba(18, 156, 98, 0.28);
+  background: rgba(18, 156, 98, 0.07);
+}
+
+/* —— 明细表卡片 —— */
+.holdings-table-card {
+  margin-top: 18px;
+  padding: 16px 18px 12px;
+}
+
+.holdings-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 10px 0 4px;
+}
+
+.holdings-filter__count {
+  margin-left: 5px;
+  font-size: 10.5px;
+  opacity: 0.72;
+}
+
+.holdings-table-wrap {
+  overflow-x: auto;
+  margin-top: 6px;
+}
+
+.holdings-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+
+.holdings-table th,
+.holdings-table td {
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.holdings-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 6px 10px;
+  background: var(--bg-subtle);
+  border-bottom: 1px solid var(--border-strong);
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+/* 数值列统一等宽 + 右对齐，方便纵向比较数量级 */
+.holdings-table th.is-numeric,
+.holdings-table td.is-numeric {
+  text-align: right;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1, 'zero' 1;
+}
+
+.holdings-table tbody tr:hover {
+  background: #fafbfd;
+}
+
+.holdings-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.holdings-th {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  font: inherit;
+  font-weight: 600;
+  color: inherit;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.holdings-th:hover {
+  color: var(--accent);
+}
+
+.holdings-th__arrow {
+  display: inline-block;
+  width: 8px;
+  font-size: 8px;
+  color: var(--accent);
+}
+
+.holdings-name {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 132px;
+  text-align: left;
+  font-family: var(--font-sans);
+}
+
+.holdings-name__text {
+  color: var(--text);
+}
+
+.holdings-name__code {
+  font-size: 10.5px;
+  color: var(--text-muted);
+}
+
+.holdings-group {
+  font-family: var(--font-mono);
+  font-weight: 600;
+}
+
+/* 盈亏率单元格：数值 + 一条以 0 为中心的发散微条 */
+.holdings-pnlcell {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+  min-width: 84px;
+}
+
+.holdings-pnlbar {
+  position: relative;
+  width: 84px;
+  height: 3px;
+  border-radius: 2px;
+  background: #eef1f5;
+}
+
+/* 中轴线：把「左＝亏、右＝盈」的分界画出来 */
+.holdings-pnlbar::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: -1px;
+  width: 1px;
+  height: 5px;
+  background: #cfd6e0;
+}
+
+.holdings-pnlbar__fill {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  border-radius: 2px;
+}
+
+/* 亏损向左（绿）、盈利向右（红），与 A 股红涨绿跌一致 */
+.holdings-pnlbar__fill.is-loss {
+  right: 50%;
+  background: var(--down);
+}
+
+.holdings-pnlbar__fill.is-gain {
+  left: 50%;
+  background: var(--up);
+}
+
+/* 距成本（亏损仓）：琥珀色表示「缺口」，避免与跌色的绿混淆 */
+.holdings-breakeven {
+  color: #8a6d1f;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* 距成本（盈利仓）：可回撤空间，用跌色的绿表示「安全垫」 */
+.holdings-cushion {
+  color: var(--down);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* 快照价标记 */
+.holdings-price--snapshot {
+  color: var(--text-muted);
+}
+
+.holdings-snap-dot {
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  margin-left: 5px;
+  border-radius: 50%;
+  background: #e0a33e;
+  vertical-align: middle;
+}
+
+.holdings-snap-dot--inline {
+  display: inline-block;
+  margin: 0 4px;
+  vertical-align: baseline;
+}
+
+@media (max-width: 720px) {
+  .holdings-name {
+    min-width: 108px;
+  }
+  .holdings-table {
+    font-size: 12px;
+  }
+  .holdings-table th,
+  .holdings-table td {
+    padding: 6px 8px;
   }
 }

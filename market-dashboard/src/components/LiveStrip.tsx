@@ -10,7 +10,7 @@ const REFRESH_MS = 30_000
 
 type Status = 'loading' | 'ready' | 'unavailable'
 
-/** 指数信息条的挂载点（index.html 里 #root 之前的 #ticker-root，配合 sticky 固定在屏幕顶部）。 */
+/** 指数信息条的挂载点（index.html 里的 #ticker-root，配合 fixed 固定在屏幕底部）。 */
 const tickerHost = (): HTMLElement | null =>
   typeof document === 'undefined' ? null : document.getElementById('ticker-root')
 
@@ -68,7 +68,7 @@ export default function LiveStrip() {
   const kospi = data?.korea?.kospi ?? null
   const session = data?.session
 
-  // 指数信息条：portal 到 #ticker-root（sticky 钉在屏幕顶部）。容器缺失时退化为原地渲染，
+  // 指数信息条：portal 到 #ticker-root（fixed 钉在屏幕底部）。容器缺失时退化为原地渲染，
   // 这样即使 index.html 的挂载点被改动，功能也不会丢。
   const host = tickerHost()
   const indexBar =
@@ -136,7 +136,7 @@ export default function LiveStrip() {
       ) : (
         <>
           {/* 指数信息条：不在面板内渲染 —— portal 到 #ticker-root（body 直属），
-              由 position:sticky 固定在屏幕顶部、铺满 100% 宽；窄屏降为 3/2 列。
+              由 position:fixed;bottom:0 固定在屏幕底部、铺满 100% 宽；窄屏降为 3/2 列。
               面板内不再占位，故这里只渲染三张跨市场卡。 */}
           {ticker}
 

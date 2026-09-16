@@ -204,3 +204,38 @@ export function numOf(v: unknown): number | null {
   if (Array.isArray(v) && typeof v[0] === 'number') return v[0]
   return null
 }
+
+/* ------------------------------ 持仓看板：盈亏配色 ------------------------------ */
+
+/**
+ * 盈亏幅度 → 颜色，遵循**与页面数字一致**的 A 股习惯：**红涨绿跌**。
+ *
+ * 注意：这里曾经用「红色＝亏损」的直觉配色，但页面上的 `−45.82%` 是绿色（trendClass），
+ * 同一屏里数字绿、条形红会自相矛盾，所以统一到红涨绿跌。
+ * 幅度越大颜色越重，`maxAbs` 由调用方按实际数据给出，避免小波动组合整屏发白。
+ */
+export function pnlColor(pnlPct: number, maxAbs = 0.45): string {
+  const t = Math.min(maxAbs > 0 ? Math.abs(pnlPct) / maxAbs : 0, 1)
+  const gain = pnlPct >= 0
+  const from = gain ? [233, 168, 160] : [154, 205, 182] // 浅红 / 浅绿
+  const to = gain ? [143, 31, 24] : [10, 92, 58] // 深红 / 深绿
+  const mix = from.map((f, i) => Math.round(f + (to[i] - f) * t))
+  return `rgb(${mix[0]}, ${mix[1]}, ${mix[2]})`
+}
+
+/** 盈亏数字色（与 CSS 的 --up/--down 保持一致），供图表标签使用。 */
+export function pnlTextColor(pnlPct: number): string {
+  return pnlPct >= 0 ? C.up : C.down
+}
+
+/** 发散条形图在 0 处的参考线（横条图用法：data: [{ xAxis: 0 }]）。 */
+export function zeroMarkLine(): Record<string, unknown> {
+  return {
+    silent: true,
+    symbol: 'none',
+    animation: false,
+    lineStyle: { color: '#c3cbd8', width: 1, type: 'solid' },
+    label: { show: false },
+    data: [{ xAxis: 0 }],
+  }
+}

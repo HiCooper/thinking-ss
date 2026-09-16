@@ -439,6 +439,7 @@ interface StatsLike {
 
 interface FsLike {
   statSync: (path: string) => StatsLike
+  readFileSync: (path: string, encoding: string) => string
 }
 
 let fsPromise: Promise<FsLike | null> | null = null
@@ -461,12 +462,12 @@ function loadFs(): Promise<FsLike | null> {
   return fsPromise
 }
 
-/** root + 目录（支持绝对/相对、去掉多余斜杠）→ data.json 的绝对路径。 */
-function dataFile(root: string, dir: string): string {
+/** root + 目录（支持绝对/相对、去掉多余斜杠）+ 文件名 → 该文件的绝对路径。 */
+function dataFile(root: string, dir: string, name = 'data.json'): string {
   const clean = dir.replace(/\/+$/, '')
-  if (clean.startsWith('/')) return `${clean}/data.json`
+  if (clean.startsWith('/')) return `${clean}/${name}`
   const base = root.replace(/\/+$/, '')
-  return `${base}/${clean.replace(/^\.\//, '')}/data.json`
+  return `${base}/${clean.replace(/^\.\//, '')}/${name}`
 }
 
 /** 依次探测候选文件，返回第一个存在者的 mtime/size；都不存在 → {0,0}（前端静默忽略）。 */
@@ -482,6 +483,189 @@ async function readDataVersion(candidates: string[]): Promise<DataVersionPayload
     }
   }
   return { mtime: 0, size: 0 }
+}
+
+/* ------------------------------ /api/holdings（持仓实时行情） ------------------------------ */
+
+/**
+ * 持仓明细行（`public/holdings.json` 的 rows 子集，本接口只关心代码与名称）。
+ * 份额/成本不在这里参与计算——前端拿到报价后自己算市值与浮亏，
+ * 这样接口职责单一：**只负责报价**。
+ */
+export interface HoldingQuote {
+  /** 6 位证券代码（原样回传，前端据此与 holdings.json 对齐） */
+  code: string
+  /** 新浪符号（sh588000 / sz159516 …） */
+  symbol: string
+  /** 行情源给出的名称 */
+  name: string | null
+  /** 现价；停牌/未开盘时为 0 → 归为 null，前端显示占位而不显示 0 */
+  price: number | null
+  prev_close: number | null
+  open: number | null
+  high: number | null
+  low: number | null
+  /** 当日涨跌幅 %（现价 vs 昨收） */
+  chg_pct: number | null
+  /** 当日成交额（亿元） */
+  amount: number | null
+}
+
+export interface HoldingQuotesPayload {
+  ts: string
+  session: SpotSession
+  quotes: HoldingQuote[]
+  errors: string[]
+}
+
+/**
+ * 6 位代码 → 新浪符号前缀。
+ * 5/6/9 开头（沪市 ETF、沪市股票、沪 B）走 sh；其余（深市 ETF/LOF、深市股票、北交所）走 sz/bj。
+ * 本项目持仓是 ETF/LOF，实际只用到 5xxxxx → sh、1xxxxx → sz 两条。
+ */
+function sinaSymbol(code: string): string {
+  const c = code.trim()
+  if (/^[569]/.test(c)) return `sh${c}`
+  if (/^[48]/.test(c)) return `bj${c}`
+  return `sz${c}`
+}
+
+/** 通用新浪批量取数：返回「符号 → 字段数组」。与 spot 的 fetchQuotes 同源，但不做固定符号校验。 */
+async function fetchSinaBatch(symbols: string[], errors: string[]): Promise<QuoteMap> {
+  const quotes: QuoteMap = new Map()
+  if (symbols.length === 0) return quotes
+
+  let res: Response
+  try {
+    res = await fetch(`${SINA_ENDPOINT}${symbols.join(',')}`, {
+      headers: SINA_HEADERS,
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+    })
+  } catch (err) {
+    errors.push(`新浪行情请求失败：${err instanceof Error ? err.message : String(err)}`)
+    return quotes
+  }
+  if (!res.ok) {
+    errors.push(`新浪行情返回 HTTP ${res.status}`)
+    return quotes
+  }
+
+  let text: string
+  try {
+    text = new TextDecoder('gbk').decode(await res.arrayBuffer())
+  } catch (err) {
+    errors.push(`GBK 解码失败：${err instanceof Error ? err.message : String(err)}`)
+    return quotes
+  }
+
+  const re = /var\s+hq_str_([A-Za-z0-9_]+)\s*=\s*"([^"]*)"\s*;/g
+  let m: RegExpExecArray | null
+  while ((m = re.exec(text)) !== null) {
+    const body = m[2].trim()
+    if (body !== '') quotes.set(m[1], body.split(','))
+  }
+  return quotes
+}
+
+interface HoldingsFileLike {
+  rows?: { code?: unknown; name?: unknown }[]
+}
+
+/**
+ * 依次探测候选 holdings.json，读出代码清单（保持文件顺序、去重）。
+ * 文件缺失时返回 null，由调用方转成一条可读的 errors 提示。
+ */
+async function readHoldingsCodes(
+  candidates: string[],
+): Promise<{ code: string; name: string | null }[] | null> {
+  const fs = await loadFs()
+  if (!fs) return null
+  for (const file of candidates) {
+    let raw: string
+    try {
+      raw = fs.readFileSync(file, 'utf-8')
+    } catch {
+      continue // 文件不存在 / 无权限：试下一个候选
+    }
+    try {
+      const parsed = JSON.parse(raw) as HoldingsFileLike
+      const rows = Array.isArray(parsed.rows) ? parsed.rows : []
+      const out: { code: string; name: string | null }[] = []
+      const seen = new Set<string>()
+      for (const r of rows) {
+        const code = typeof r.code === 'string' ? r.code.trim() : ''
+        if (!/^\d{6}$/.test(code) || seen.has(code)) continue
+        seen.add(code)
+        out.push({ code, name: typeof r.name === 'string' ? r.name : null })
+      }
+      return out
+    } catch {
+      return null // 文件在但 JSON 坏了：直接报错，不要静默跳过
+    }
+  }
+  return null
+}
+
+/** ETF/LOF 全量字段下标：[0]名称 [1]今开 [2]昨收 [3]现价 [4]最高 [5]最低 … [8]成交量 [9]成交额(元) */
+function buildHoldingQuote(code: string, fields: string[] | undefined): HoldingQuote {
+  const symbol = sinaSymbol(code)
+  const base: HoldingQuote = {
+    code,
+    symbol,
+    name: null,
+    price: null,
+    prev_close: null,
+    open: null,
+    high: null,
+    low: null,
+    chg_pct: null,
+    amount: null,
+  }
+  if (!fields) return base
+
+  const price = toNum(fields[3])
+  return {
+    ...base,
+    name: fields[0]?.trim() || null,
+    // 停牌时现价为 0.00，照抄会显示成「跌 100%」，统一归 null 交给前端占位
+    price: price !== null && price > 0 ? price : null,
+    prev_close: toNum(fields[2]),
+    open: toNum(fields[1]),
+    high: toNum(fields[4]),
+    low: toNum(fields[5]),
+    chg_pct: chgPct(price, toNum(fields[2])),
+    amount: yi(toNum(fields[9])),
+  }
+}
+
+async function buildHoldingQuotes(files: string[]): Promise<HoldingQuotesPayload> {
+  const { minutes, ts } = beijingNow()
+  const session = sessionOf(minutes)
+  const errors: string[] = []
+
+  const holdings = await readHoldingsCodes(files)
+  if (holdings === null) {
+    return {
+      ts,
+      session,
+      quotes: [],
+      errors: ['未找到或无法解析 holdings.json（请先运行 python3 scripts/export_holdings.py）'],
+    }
+  }
+  if (holdings.length === 0) {
+    return { ts, session, quotes: [], errors: ['holdings.json 里没有可用的 6 位证券代码'] }
+  }
+
+  const symbols = holdings.map((h) => sinaSymbol(h.code))
+  const quotes = await fetchSinaBatch(symbols, errors)
+
+  const payload: HoldingQuote[] = holdings.map((h) => {
+    const fields = quotes.get(sinaSymbol(h.code))
+    if (!fields) errors.push(`${h.name ?? h.code}（${h.code}）：未返回数据`)
+    return buildHoldingQuote(h.code, fields)
+  })
+
+  return { ts, session, quotes: payload, errors }
 }
 
 /* ------------------------------ 中间件 ------------------------------ */
@@ -524,7 +708,7 @@ function failurePayload(message: string): SpotPayload {
   }
 }
 
-function createMiddleware(dataFiles: string[]): Connect.NextHandleFunction {
+function createMiddleware(dataFiles: string[], holdingsFiles: string[]): Connect.NextHandleFunction {
   return (req, res, next): void => {
     const request = req as unknown as HttpRequestLike
     const response = res as unknown as HttpResponseLike
@@ -539,6 +723,26 @@ function createMiddleware(dataFiles: string[]): Connect.NextHandleFunction {
       void readDataVersion(dataFiles)
         .then((payload) => sendJson(response, 200, payload))
         .catch(() => sendJson(response, 200, { mtime: 0, size: 0 }))
+      return
+    }
+
+    // 持仓实时报价（批量，一次请求覆盖全部持仓代码）
+    if (pathname === '/api/holdings') {
+      if (request.method && request.method !== 'GET' && request.method !== 'HEAD') {
+        sendJson(response, 405, { error: '仅支持 GET /api/holdings' })
+        return
+      }
+      void buildHoldingQuotes(holdingsFiles)
+        .then((payload) => sendJson(response, 200, payload))
+        .catch((err: unknown) => {
+          const { minutes, ts } = beijingNow()
+          sendJson(response, 200, {
+            ts,
+            session: sessionOf(minutes),
+            quotes: [],
+            errors: [err instanceof Error ? err.message : String(err)],
+          })
+        })
       return
     }
 
@@ -564,16 +768,24 @@ export function localApi(): Plugin {
     // dev：页面读的是 public/data.json
     configureServer(server) {
       const { root, publicDir } = server.config
-      server.middlewares.use(createMiddleware([dataFile(root, publicDir || 'public')]))
+      const pub = publicDir || 'public'
+      server.middlewares.use(
+        createMiddleware(
+          [dataFile(root, pub)],
+          [dataFile(root, pub, 'holdings.json')],
+        ),
+      )
     },
     // preview：页面读的是构建产物 outDir/data.json；它不存在时退回 public/data.json
     configurePreviewServer(server) {
       const { root, publicDir, build } = server.config
+      const out = build.outDir || 'dist'
+      const pub = publicDir || 'public'
       server.middlewares.use(
-        createMiddleware([
-          dataFile(root, build.outDir || 'dist'),
-          dataFile(root, publicDir || 'public'),
-        ]),
+        createMiddleware(
+          [dataFile(root, out), dataFile(root, pub)],
+          [dataFile(root, out, 'holdings.json'), dataFile(root, pub, 'holdings.json')],
+        ),
       )
     },
   }

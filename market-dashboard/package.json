@@ -12,7 +12,8 @@
     "typecheck": "tsc --noEmit",
     "data:setup": "bash scripts/setup-data-env.sh",
     "data:refresh": "bash scripts/refresh.sh",
-    "data:validate": "python3 scripts/validate_data.py"
+    "data:validate": "python3 scripts/validate_data.py",
+    "holdings:export": "python3 scripts/export_holdings.py"
   },
   "dependencies": {
     "echarts": "^6.1.0",
