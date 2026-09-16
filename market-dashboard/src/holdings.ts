@@ -210,9 +210,20 @@ export async function fetchHoldings(signal?: AbortSignal): Promise<HoldingsFile>
     throw new Error('无法读取 holdings.json（网络错误）')
   }
   if (res.status === 404) {
-    throw new HoldingsMissingError('未找到 /holdings.json（HTTP 404）')
+    throw new HoldingsMissingError('未找到 holdings.json（HTTP 404）')
   }
   if (!res.ok) throw new Error(`holdings.json 返回 HTTP ${res.status} ${res.statusText}`)
+
+  // 「文件不存在」在两种服务器上表现不同，要归一成同一种状态：
+  //   - 纯静态服务器 → 404（上面已处理）
+  //   - Vite dev / preview → **回退到 index.html 并返回 200**，于是会伪装成「JSON 解析失败」
+  // 靠 content-type 识别后者。否则 clone 下来（没有 holdings.json）看到的是「加载失败」，
+  // 而不是「暂无持仓数据 + 怎么创建」的指引 —— 那才是正确且可操作的状态。
+  const contentType = res.headers.get('content-type') ?? ''
+  if (!contentType.includes('json')) {
+    throw new HoldingsMissingError('未找到 holdings.json（返回的是 HTML，文件尚未生成）')
+  }
+
   let raw: unknown
   try {
     raw = await res.json()

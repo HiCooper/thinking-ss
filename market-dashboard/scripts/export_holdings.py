@@ -6,6 +6,10 @@
 `holdings.md` 是**唯一人工维护的持仓源文件**（人写的表格 + 备注），本脚本只做单向转换，
 所以不存在「两份持仓数据各写各的」的漂移问题。
 
+**隐私**：`holdings.md` 与本脚本的输出 `public/holdings.json` **都不入库**（见仓库根 `.gitignore`，
+处理方式同 `.env`），仓库里只保留 `holdings.example.md` 模板。所以 clone 下来没有持仓数据，
+首次使用要先 `cp holdings.example.md holdings.md`。
+
 **成本价不用 md 里显示的现价/成本列**：那两列是行情软件四舍五入后的值（如 0.773），
 用它反算总成本会引入几元误差。改用 App 的权威口径反推：
 
@@ -195,7 +199,13 @@ def main() -> None:
     args = ap.parse_args()
 
     if not MD.exists():
-        die(f"找不到持仓源文件：{MD}")
+        die(
+            f"找不到持仓源文件：{MD}\n"
+            "  持仓是**本地隐私文件**，不随仓库分发（处理方式同 .env），clone 下来是没有的。\n"
+            "  首次使用请在仓库根目录执行：\n"
+            "      cp holdings.example.md holdings.md\n"
+            "  然后填入自己的持仓（格式见模板内「如何填」与 AGENTS.md §B5），再重跑本脚本。"
+        )
     text = MD.read_text(encoding="utf-8")
 
     groups = parse_groups(text)

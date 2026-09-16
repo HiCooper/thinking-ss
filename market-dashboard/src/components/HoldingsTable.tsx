@@ -16,6 +16,7 @@ type SortKey =
   | 'cost'
   | 'price'
   | 'chgPct'
+  | 'todayPnl'
   | 'marketValue'
   | 'pnl'
   | 'pnlPct'
@@ -66,10 +67,22 @@ const COLUMNS: Column[] = [
   },
   {
     key: 'chgPct',
-    label: '今日',
+    label: '今日涨跌',
     numeric: true,
+    title: '当日涨跌幅（现价 vs 昨收）；无实时报价时为「—」',
     render: (c) => (
       <span className={trendClass(c.chgPct)}>{c.chgPct === null ? '—' : fmtPct(c.chgPct)}</span>
+    ),
+  },
+  {
+    key: 'todayPnl',
+    label: '今日盈亏',
+    numeric: true,
+    title: '份额 ×（现价 − 昨收），单位：元；无实时报价时为「—」',
+    render: (c) => (
+      <span className={trendClass(c.todayPnl)}>
+        {c.todayPnl === null ? '—' : fmtSigned(c.todayPnl, 0)}
+      </span>
     ),
   },
   { key: 'marketValue', label: '市值', numeric: true, render: (c) => fmtInt(c.marketValue) },
@@ -156,7 +169,11 @@ export default function HoldingsTable({ cells, groups }: HoldingsTableProps) {
     }
     setSortKey(key)
     // 金额/份额类列默认从大到小；盈亏类默认从小到大（最惨在前）
-    setSortDir(key === 'pnl' || key === 'pnlPct' || key === 'breakevenPct' ? 'asc' : 'desc')
+    setSortDir(
+      key === 'pnl' || key === 'pnlPct' || key === 'breakevenPct' || key === 'todayPnl'
+        ? 'asc'
+        : 'desc',
+    )
   }
 
   const sumMv = rows.reduce((s, c) => s + c.marketValue, 0)

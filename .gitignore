@@ -1,0 +1,25 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# 隐私：以下文件只在本地存在，不入库（处理方式同 .env）
+#
+#   holdings.md                            ← 真实持仓（份额 / 成本 / 市值）
+#   market-dashboard/public/holdings.json  ← 上者生成的机器可读快照
+#   calibration-log.md                     ← 校准日志（含持仓成本价与组合金额）
+#
+# 仓库里对应的模板 / 替代物：
+#   holdings.example.md                    ← 持仓文件模板（全是编造数据）
+#
+# 持仓首次使用：
+#     cp holdings.example.md holdings.md        # 在仓库根目录执行，然后填入自己的持仓
+#     cd market-dashboard && npm run holdings:export
+#
+# 因此 clone 下来的仓库**不含任何持仓数据**，持仓看板会显示「暂无持仓数据」
+# 并给出上面这两条命令 —— 这是预期状态，不是故障。
+#
+# 改动前请先读 AGENTS.md 顶部的隐私声明、§5 与 §B5（口径与格式契约）。
+#
+# 注意：这三个文件的历史条目已用 git filter-branch 清除过一次（2026-09-16）。
+# 若将来又不小心提交了它们，光删文件不够 —— 需要同样重写历史，见 AGENTS.md。
+# ─────────────────────────────────────────────────────────────────────────────
+/holdings.md
+/calibration-log.md
+market-dashboard/public/holdings.json

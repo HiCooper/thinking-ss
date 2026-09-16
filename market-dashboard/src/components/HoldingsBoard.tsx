@@ -114,11 +114,18 @@ export default function HoldingsBoard() {
         {missing ? (
           <div className="state-panel__hint">
             <p>
-              期望路径：<code>public/holdings.json</code>（构建后即 <code>/holdings.json</code>）
+              持仓是<b>本地隐私文件</b>，不随仓库分发（处理方式同 <code>.env</code>），
+              所以刚 clone 下来的仓库里没有持仓数据 —— 这是预期状态，不是故障。
             </p>
+            <p>首次使用，在仓库根目录执行：</p>
+            <pre className="state-panel__code">{`cp holdings.example.md holdings.md    # 然后填入自己的持仓
+cd market-dashboard && npm run holdings:export`}</pre>
             <p>
-              生成方式：<code>python3 scripts/export_holdings.py</code>（读取仓库根目录{' '}
-              <code>holdings.md</code>）
+              期望产物：<code>public/holdings.json</code>（构建后即 <code>/holdings.json</code>）
+            </p>
+            <p className="muted">
+              字段口径与校验规则见 <code>holdings.example.md</code> 的「如何填」与{' '}
+              <code>AGENTS.md</code> §B5。
             </p>
           </div>
         ) : null}

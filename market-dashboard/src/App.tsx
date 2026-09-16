@@ -21,8 +21,9 @@ const VIEW_META: Record<View, { title: string; sub: string; sources: string }> =
   },
   holdings: {
     title: '我的持仓看板',
-    sub: '持仓结构、盈亏与回本缺口',
-    sources: '份额与成本来自仓库根目录 holdings.md（脚本导出）· 现价来自新浪财经 hq.sinajs.cn（本地接口代理）',
+    sub: '持仓结构、盈亏与距成本缺口',
+    sources:
+      '份额与成本来自本地 holdings.md（隐私文件、不入库；模板见 holdings.example.md）· 现价来自新浪财经 hq.sinajs.cn（本地接口代理）',
   },
 }
 
