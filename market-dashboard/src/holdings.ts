@@ -73,6 +73,8 @@ export interface HoldingQuote {
   low: number | null
   chg_pct: number | null
   amount: number | null
+  /** 行情自带的最近交易日（YYYY-MM-DD）；非交易日停在上一个交易日 */
+  quote_date: string | null
 }
 
 export interface HoldingQuotesFile {
@@ -183,6 +185,7 @@ function parseQuote(raw: unknown): HoldingQuote | null {
     low: toNum(o.low),
     chg_pct: toNum(o.chg_pct),
     amount: toNum(o.amount),
+    quote_date: /^\d{4}-\d{2}-\d{2}$/.test(str(o.quote_date)) ? str(o.quote_date) : null,
   }
 }
 
@@ -325,6 +328,13 @@ export interface PortfolioTotals {
   pnlPct: number
   /** 今日盈亏合计；任一只有报价才计入，全无报价时为 null */
   todayPnl: number | null
+  /**
+   * 今日盈亏率（小数）= 今日盈亏 / **昨收**市值（除期初）。
+   *
+   * 与券商口径一致，也与图 3 记录的 `day_pnl_pct` 同式。**不要改用当前市值做分母**：
+   * 分母会被当天自己的涨跌带着跑，涨时低估涨幅、跌时高估跌幅。昨收市值为 0 或负时为 null。
+   */
+  todayPnlPct: number | null
   /** 今日有报价的只数 */
   liveCount: number
   /** 距成本：亏损时为「还需涨多少回本」，盈利时为「可回撤多少仍不亏」（小数） */
@@ -344,6 +354,9 @@ export function portfolioTotals(cells: HoldingCell[]): PortfolioTotals {
   const costValue = cells.reduce((s, c) => s + c.costValue, 0)
   const pnl = marketValue - costValue
   const withToday = cells.filter((c) => c.todayPnl !== null)
+  const todayPnl = withToday.length > 0 ? withToday.reduce((s, c) => s + (c.todayPnl ?? 0), 0) : null
+  // 昨收市值 = 当前市值 − 今日盈亏（份额不变，价格变动即当日盈亏）
+  const prevValue = todayPnl === null ? null : marketValue - todayPnl
   const losersList = cells.filter((c) => c.pnl < 0)
   const winnersList = cells.filter((c) => c.pnl > 0)
   return {
@@ -352,7 +365,8 @@ export function portfolioTotals(cells: HoldingCell[]): PortfolioTotals {
     costValue,
     pnl,
     pnlPct: costValue > 0 ? pnl / costValue : 0,
-    todayPnl: withToday.length > 0 ? withToday.reduce((s, c) => s + (c.todayPnl ?? 0), 0) : null,
+    todayPnl,
+    todayPnlPct: todayPnl !== null && prevValue !== null && prevValue > 0 ? todayPnl / prevValue : null,
     liveCount: cells.filter((c) => c.priceSource === 'live').length,
     breakevenPct: marketValue > 0 ? (costValue - marketValue) / marketValue : 0,
     grossPnl: cells.reduce((s, c) => s + Math.abs(c.pnl), 0),

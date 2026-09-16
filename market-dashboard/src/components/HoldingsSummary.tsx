@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { fmtInt, fmtNum, fmtPct, fmtSigned, trendClass } from '../format'
+import { fmtNum, fmtPct, fmtSignedYuan, fmtYuan, trendClass } from '../format'
 import { breakevenOf } from '../holdings'
 import type { HoldingCell, HoldingQuotesFile, PortfolioTotals } from '../holdings'
 
@@ -32,24 +32,21 @@ interface Metric {
 export default function HoldingsSummary({ cells, totals, quotes }: HoldingsSummaryProps) {
   const metrics = useMemo<Metric[]>(() => {
     const pnlPct100 = totals.pnlPct * 100
-    const todayPct100 =
-      totals.todayPnl !== null && totals.marketValue > 0
-        ? (totals.todayPnl / totals.marketValue) * 100
-        : null
+    const todayPct100 = totals.todayPnlPct === null ? null : totals.todayPnlPct * 100
     const be = breakevenOf(totals)
 
     return [
       {
         key: 'mv',
         label: '持仓市值',
-        value: fmtInt(totals.marketValue),
+        value: fmtYuan(totals.marketValue),
         unit: '元',
         hint: `${totals.count} 只`,
         trend: totals.todayPnl,
         details: [
           {
             label: '今日盈亏',
-            text: totals.todayPnl === null ? '—' : `${fmtSigned(totals.todayPnl, 0)} 元`,
+            text: totals.todayPnl === null ? '—' : `${fmtSignedYuan(totals.todayPnl)} 元`,
             trend: totals.todayPnl,
             title: '按现价相对昨收计算，仅统计有实时报价的持仓',
           },
@@ -59,7 +56,7 @@ export default function HoldingsSummary({ cells, totals, quotes }: HoldingsSumma
       {
         key: 'cost',
         label: '持仓成本',
-        value: fmtInt(totals.costValue),
+        value: fmtYuan(totals.costValue),
         unit: '元',
         // 成本是既成事实，不随盈亏涨跌上色
         trend: null,
@@ -84,25 +81,25 @@ export default function HoldingsSummary({ cells, totals, quotes }: HoldingsSumma
       {
         key: 'pnl',
         label: '浮动盈亏',
-        value: fmtSigned(totals.pnl, 0),
+        value: fmtSignedYuan(totals.pnl),
         unit: '元',
         trend: totals.pnl,
         details: [
           { label: '盈亏率', text: fmtPct(pnlPct100), trend: totals.pnl },
           {
             label: '最大亏损',
-            text: totals.worst ? `${totals.worst.name} ${fmtSigned(totals.worst.pnl, 0)}` : '—',
+            text: totals.worst ? `${totals.worst.name} ${fmtSignedYuan(totals.worst.pnl)}` : '—',
             trend: totals.worst ? totals.worst.pnl : null,
             title: totals.worst
-              ? `${totals.worst.name}（${totals.worst.code}）浮动盈亏 ${fmtInt(totals.worst.pnl)} 元`
+              ? `${totals.worst.name}（${totals.worst.code}）浮动盈亏 ${fmtSignedYuan(totals.worst.pnl)} 元`
               : '当前没有亏损中的持仓',
           },
           {
             label: '最大盈利',
-            text: totals.best ? `${totals.best.name} ${fmtSigned(totals.best.pnl, 0)}` : '—',
+            text: totals.best ? `${totals.best.name} ${fmtSignedYuan(totals.best.pnl)}` : '—',
             trend: totals.best ? totals.best.pnl : null,
             title: totals.best
-              ? `${totals.best.name}（${totals.best.code}）浮动盈亏 ${fmtInt(totals.best.pnl)} 元`
+              ? `${totals.best.name}（${totals.best.code}）浮动盈亏 ${fmtSignedYuan(totals.best.pnl)} 元`
               : '当前没有盈利中的持仓',
           },
         ],
@@ -110,15 +107,16 @@ export default function HoldingsSummary({ cells, totals, quotes }: HoldingsSumma
       {
         key: 'today',
         label: '今日盈亏',
-        value: totals.todayPnl === null ? '—' : fmtSigned(totals.todayPnl, 0),
+        value: totals.todayPnl === null ? '—' : fmtSignedYuan(totals.todayPnl),
         unit: '元',
         trend: totals.todayPnl,
         hint: quotes ? quotes.session.label : undefined,
         details: [
           {
-            label: '占市值',
+            label: '较昨收',
             text: fmtPct(todayPct100),
             trend: totals.todayPnl,
+            title: '今日盈亏 / 昨收市值（除期初），与券商口径一致，也与图 3 记录的当日收益率同式',
           },
           {
             label: '涨 / 跌',

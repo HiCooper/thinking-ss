@@ -21,6 +21,20 @@ export default function Dashboard({ data }: { data: MarketData }) {
 
   const lastDate = rows.length > 0 ? rows[rows.length - 1].date : ''
 
+  /**
+   * 末端连续缺两融的天数。
+   * 两融要到**次日**才取得到（不是当晚），所以 data.json 里最新交易日的两融恒为空。
+   * 这属于正常现象，但在图上表现为「线比 X 轴短一截」，不看图例会以为数据丢了 —— 显式标出来。
+   */
+  const marginPendingDays = useMemo(() => {
+    let n = 0
+    for (let i = rows.length - 1; i >= 0; i--) {
+      if (rows[i].margin_total !== null) break
+      n++
+    }
+    return n
+  }, [rows])
+
   return (
     <>
       <LiveStrip />
@@ -83,6 +97,11 @@ export default function Dashboard({ data }: { data: MarketData }) {
             <>
               <span className="tag">双 y 轴</span>
               <span className="tag tag--ghost">单位：亿元</span>
+              {marginPendingDays > 0 ? (
+                <span className="tag tag--ghost" title="两融要到次日才公布，最新交易日的值恒为空；次日跑一次 data:refresh 即补齐">
+                  最新 {marginPendingDays} 日待公布
+                </span>
+              ) : null}
             </>
           }
         >
@@ -97,6 +116,11 @@ export default function Dashboard({ data }: { data: MarketData }) {
             <>
               <span className="tag">同一 y 轴 · 单位：%</span>
               <span className="tag tag--ghost">杠杆率高＝拥挤，回落＝去杠杆</span>
+              {marginPendingDays > 0 ? (
+                <span className="tag tag--ghost" title="两融要到次日才公布，最新交易日的值恒为空；次日跑一次 data:refresh 即补齐">
+                  最新 {marginPendingDays} 日待公布
+                </span>
+              ) : null}
             </>
           }
         >

@@ -19,6 +19,25 @@ export function fmtInt(v: number | null | undefined): string {
   return fmtNum(v, 0)
 }
 
+/**
+ * 人民币金额一律**精确到分**（2 位小数）。
+ *
+ * 展示「元」的地方必须走 `fmtYuan` / `fmtSignedYuan`，不要直接用 `fmtNum` / `fmtSigned`：
+ * 后者的位数是「这个数看起来该多长」的展示偏好，而金额位数是**口径**，两者别混。
+ * 注意不适用于「亿元」（成交额 / 两融 / 流通市值）—— 0.01 亿 = 100 万元，分在亿位上没有意义。
+ */
+export const MONEY_DIGITS = 2
+
+/** 金额（元），精确到分。 */
+export function fmtYuan(v: number | null | undefined): string {
+  return fmtNum(v, MONEY_DIGITS)
+}
+
+/** 带符号金额（元），精确到分：+1,234.56 / -1,234.56 / 0.00。 */
+export function fmtSignedYuan(v: number | null | undefined): string {
+  return fmtSigned(v, MONEY_DIGITS)
+}
+
 /** 带符号数字（+1.23 / -1.23 / 0.00）。 */
 export function fmtSigned(v: number | null | undefined, digits = 2): string {
   if (!isNum(v)) return EMPTY

@@ -228,14 +228,18 @@ export function pnlTextColor(pnlPct: number): string {
   return pnlPct >= 0 ? C.up : C.down
 }
 
-/** 发散条形图在 0 处的参考线（横条图用法：data: [{ xAxis: 0 }]）。 */
-export function zeroMarkLine(): Record<string, unknown> {
+/**
+ * 在 0 处画一条参考线。
+ *   - 横向条形图（发散条）：`zeroMarkLine('x')` —— 0 在 x 轴上
+ *   - 时间序列折线图：     `zeroMarkLine('y')` —— 0 在 y 轴上
+ */
+export function zeroMarkLine(axis: 'x' | 'y' = 'x'): Record<string, unknown> {
   return {
     silent: true,
     symbol: 'none',
     animation: false,
     lineStyle: { color: '#c3cbd8', width: 1, type: 'solid' },
     label: { show: false },
-    data: [{ xAxis: 0 }],
+    data: [axis === 'x' ? { xAxis: 0 } : { yAxis: 0 }],
   }
 }

@@ -12,7 +12,7 @@ import {
   ttTitle,
   zeroMarkLine,
 } from '../chartTheme'
-import { fmtInt, fmtPct, fmtSigned } from '../format'
+import { fmtPct, fmtSignedYuan, fmtYuan } from '../format'
 import { breakevenOf } from '../holdings'
 import type { HoldingCell } from '../holdings'
 
@@ -46,7 +46,7 @@ export default function HoldingsPnlChart({ cells }: HoldingsPnlChartProps) {
     const min = lo < 0 ? Math.floor((lo * 1.18) / 1000) * 1000 : 0
 
     return {
-      grid: { left: 8, right: 104, top: 20, bottom: 8, containLabel: true },
+      grid: { left: 8, right: 132, top: 20, bottom: 8, containLabel: true },
       tooltip: {
         ...tooltipBase(),
         trigger: 'axis',
@@ -59,14 +59,14 @@ export default function HoldingsPnlChart({ cells }: HoldingsPnlChartProps) {
           const be = breakevenOf(c)
           return (
             ttTitle(`${c.name}　<span style="color:#8b96a6;font-weight:400">${c.code}</span>`) +
-            ttRow(c.pnl >= 0 ? C.up : C.down, '浮动盈亏', `${fmtSigned(c.pnl, 0)} 元`) +
+            ttRow(c.pnl >= 0 ? C.up : C.down, '浮动盈亏', `${fmtSignedYuan(c.pnl)} 元`) +
             ttRow(undefined, '盈亏率', fmtPct(c.pnlPct * 100)) +
             ttRow(undefined, be.kind === 'recover' ? '回本需涨' : '可回撤', fmtPct(be.pct * 100)) +
             ttDivider() +
             ttRow(
               undefined,
               '市值',
-              `${fmtInt(c.marketValue)} 元`,
+              `${fmtYuan(c.marketValue)} 元`,
               `${c.shares.toLocaleString('zh-CN')} 份`,
             ) +
             ttRow(
@@ -103,7 +103,7 @@ export default function HoldingsPnlChart({ cells }: HoldingsPnlChartProps) {
           type: 'bar',
           barWidth: 13,
           data: ordered.map((c) => {
-            const v = +c.pnl.toFixed(0)
+            const v = c.pnl
             return {
               value: v,
               itemStyle: {
@@ -116,7 +116,7 @@ export default function HoldingsPnlChart({ cells }: HoldingsPnlChartProps) {
                 color: C.legendText,
                 fontSize: 10.5,
                 fontFamily: MONO,
-                formatter: `${fmtSigned(c.pnl, 0)}　${fmtPct(c.pnlPct * 100, 1)}`,
+                formatter: `${fmtSignedYuan(c.pnl)}　${fmtPct(c.pnlPct * 100, 1)}`,
               },
             }
           }),

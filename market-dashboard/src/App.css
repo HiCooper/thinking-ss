@@ -1158,3 +1158,86 @@ code {
     padding: 6px 8px;
   }
 }
+
+/* ============================ 账户收益走势（图 3） ============================ */
+
+/* 口径切换条 + 已记录区间 */
+.trend-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+
+.trend-toolbar__units {
+  display: flex;
+  gap: 6px;
+}
+
+.trend-toolbar__meta {
+  font-size: 12px;
+}
+
+.trend-note {
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+/* 记录天数不足时的引导（渲染引导而不是空图——空图更容易被误读成「收益为 0」） */
+.trend-empty {
+  padding: 16px 18px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+}
+
+.trend-empty__title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.trend-empty__detail {
+  margin-top: 6px;
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--text-muted);
+}
+
+.trend-empty__code {
+  margin: 10px 0 0;
+  padding: 8px 10px;
+  font-size: 12px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow-x: auto;
+}
+
+.trend-empty__facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 28px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.trend-empty__facts > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.trend-empty__facts dt {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.trend-empty__facts dd {
+  font-size: 13px;
+  font-weight: 600;
+}

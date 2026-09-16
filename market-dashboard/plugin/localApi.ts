@@ -509,6 +509,12 @@ export interface HoldingQuote {
   chg_pct: number | null
   /** 当日成交额（亿元） */
   amount: number | null
+  /**
+   * 行情自带的日期（新浪字段 [30]，如 `2026-09-16`）。
+   * 它等于**最近一个交易日**，非交易日会停在上一个交易日 —— 前端据此判断
+   * 「收益记录是否落后于行情」，比用本地日期可靠（本地日期在周末/节假日会误判）。
+   */
+  quote_date: string | null
 }
 
 export interface HoldingQuotesPayload {
@@ -620,6 +626,7 @@ function buildHoldingQuote(code: string, fields: string[] | undefined): HoldingQ
     low: null,
     chg_pct: null,
     amount: null,
+    quote_date: null,
   }
   if (!fields) return base
 
@@ -635,6 +642,8 @@ function buildHoldingQuote(code: string, fields: string[] | undefined): HoldingQ
     low: toNum(fields[5]),
     chg_pct: chgPct(price, toNum(fields[2])),
     amount: yi(toNum(fields[9])),
+    // [30] = 行情日期。只接受 YYYY-MM-DD 形状，避免不同品种字段错位时把脏值传出去
+    quote_date: /^\d{4}-\d{2}-\d{2}$/.test(fields[30] ?? '') ? fields[30] : null,
   }
 }
 

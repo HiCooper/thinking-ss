@@ -13,7 +13,7 @@ import {
   ttTitle,
   zeroMarkLine,
 } from '../chartTheme'
-import { fmtInt, fmtPct, fmtSigned } from '../format'
+import { fmtPct, fmtSignedYuan, fmtYuan } from '../format'
 import { breakevenOf } from '../holdings'
 import type { GroupStat } from '../holdings'
 
@@ -62,11 +62,11 @@ export default function HoldingsStructureChart({ groups }: HoldingsStructureChar
           const be = breakevenOf(g)
           return (
             ttTitle(`${g.id}. ${g.name}`) +
-            ttRow(C.total, '市值', `${fmtInt(g.marketValue)} 元`, `${(g.weight * 100).toFixed(1)}%`) +
+            ttRow(C.total, '市值', `${fmtYuan(g.marketValue)} 元`, `${(g.weight * 100).toFixed(1)}%`) +
             ttRow(
               g.pnl >= 0 ? C.up : C.down,
               '净盈亏',
-              `${fmtSigned(g.pnl, 0)} 元`,
+              `${fmtSignedYuan(g.pnl)} 元`,
               `${(g.pnlContribution * 100).toFixed(1)}% 贡献`,
             ) +
             ttDivider() +

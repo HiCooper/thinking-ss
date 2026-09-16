@@ -43,6 +43,16 @@ if [ ! -f public/data.json ]; then
   exit 1
 fi
 
-# 4) 起服务（--port 覆盖 vite.config 的默认端口）
+# 4) 日收益记录检查（收盘后自动补记；盘中/已记录/非交易日都会跳过）
+#    放后台跑：常见情形 0.3s，但需要补记时要取 22 只收盘价（约 5–8s），
+#    不能让它拖慢启动。失败不影响看板（手动 npm run holdings:snapshot 即可）。
+if command -v python3 >/dev/null 2>&1; then
+  (
+    python3 scripts/record_holdings_snapshot.py --if-due 2>&1 \
+      | sed 's/^/  [收益记录] /'
+  ) &
+fi
+
+# 5) 起服务（--port 覆盖 vite.config 的默认端口）
 echo "▶ 打开 http://127.0.0.1:${PORT}"
 exec npm run dev -- --port "${PORT}"

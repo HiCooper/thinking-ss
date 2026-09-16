@@ -17,8 +17,9 @@
 
 > ### ⚠️ 隐私：持仓数据不入库
 >
-> 以下三个文件**已被仓库根 `.gitignore` 忽略**，只在本地存在，处理方式同 `.env`：
+> 以下文件**已被仓库根 `.gitignore` 忽略**，只在本地存在，处理方式同 `.env`：
 > `holdings.md`（真实持仓）、`market-dashboard/public/holdings.json`（它生成的快照）、
+> `market-dashboard/public/holdings-history.json`（账户每日收益记录）、
 > `calibration-log.md`（校准日志，里面有持仓成本价与组合金额）。
 > 仓库里只有模板 **`holdings.example.md`**。
 >
@@ -49,6 +50,7 @@
 holdings.md                       ← 真实持仓。**本地文件，不入库**
 calibration-log.md                ← 校准日志（含持仓成本）。**本地文件，不入库**
 market-dashboard/public/holdings.json ← 上者生成的快照。**本地文件，不入库**
+market-dashboard/public/holdings-history.json ← 账户每日收益记录。**本地文件，不入库**
 ```
 
 - **用户说「跑看板」「加个功能」→ 只动 `market-dashboard/`。**
@@ -67,8 +69,11 @@ market-dashboard/public/holdings.json ← 上者生成的快照。**本地文件
 | `plugin/localApi.ts` | 本地接口插件：`/api/spot`、`/api/holdings`、`/api/data-version` |
 | `scripts/export_data.py` | 大盘日频数据导出（含逐日缓存） |
 | `scripts/export_holdings.py` | `holdings.md` → `public/holdings.json`（两者都不入库） |
+| `scripts/record_holdings_snapshot.py` | 收盘后追加一笔**账户级**收益记录 → `public/holdings-history.json`（不入库） |
+| ↑ 的自动检查 | `npm start` 会调 `--if-due`：仅在「已收盘且今天没记录」时补记，盘中/非交易日跳过 |
 | `public/data.json` | 大盘日频数据（随仓库提交） |
 | `public/holdings.json` | 持仓快照（由脚本生成，**别手改**；**本地文件，不入库**） |
+| `public/holdings-history.json` | 账户每日收益记录（`npm run holdings:snapshot` 累积；**本地文件，不入库**） |
 
 ---
 
@@ -116,7 +121,7 @@ cd market-dashboard && npm run typecheck && npm run build                       
 有条件用无头浏览器时，再确认渲染结果（这是真正能证明「跑起来了」的检查）：
 
 - 大盘看板：4 张摘要卡、5 张图（`canvas` 5 个）、3 张实时报价卡、底部固定指数条 5 个指数
-- 持仓看板：明细行数 = `holdings.json` 里的条数、2 张图、总览卡 4 张
+- 持仓看板：明细行数 = `holdings.json` 里的条数、**3 张图**、总览卡 4 张（图 3 在记录不足 2 天时渲染引导而非空图）
 - 控制台**无未捕获异常**
 
 用 Chrome 无头 + CDP 自查时，**测试完把 Chrome 实例和端口进程杀掉**，别留在后台。
@@ -279,7 +284,8 @@ python3 scripts/export_holdings.py --check  # 只校验不写文件
 - **不要为了让脚本通过而伪造数字**（比如把盈亏符号改掉、把市值凑成 `份额×现价`）。脚本的校验就是用来抓这类问题的；过不了就说明源数据有问题，回去问用户。
 - **不要动 `market-dashboard/dist/`**：它在 `.gitignore` 里，是构建产物。
 - **改完跑 `npm run typecheck`**（`npm run build` 已包含）。`tsconfig` 开了 `strict` + `noUnusedLocals`。
-- **绝不提交 `holdings.md`、`public/holdings.json`、`calibration-log.md`**：它们含真实持仓、成本与金额，
+- **绝不提交 `holdings.md`、`public/holdings.json`、`public/holdings-history.json`、`calibration-log.md`**：
+  它们含真实持仓、成本与金额，
   已被 `.gitignore` 忽略。不要用 `git add -f` 绕过；也不要把真实数字抄进任何会入库的文件
   （示例一律用编造数据）。**这些文件曾误入历史并被 `git filter-branch` 清除过一次，别再犯。**
 - **不要自动 git commit / push**，除非用户明确要求。
@@ -305,6 +311,7 @@ python3 scripts/export_holdings.py --check  # 只校验不写文件
 
 | 位置 | 注意 |
 |---|---|
+| `src/format.ts` | **金额（元）一律精确到分**，走 `fmtYuan` / `fmtSignedYuan`；**不要**用 `fmtNum` / `fmtSigned` 直接格式化金额（那是展示偏好，金额位数是口径）。份额、单价（元/份）、收益率、`亿元`（成交额/两融/流通市值）与图表坐标轴刻度都不适用 |
 | `src/holdings.ts` | `GroupStat.pnlContribution` 是**有符号**的；新增派生指标时保持对正负都成立 |
 | `src/components/HoldingsStructureChart.tsx` | 发散条形图：`yAxis.axisLine.onZero = false` 让类目名贴左（否则压在负向条上），0 处靠 `markLine` 标出 |
 | `src/components/HoldingsPnlChart.tsx` | `xAxis` 的 `min/max` 必须同时覆盖正负；配色用 `chartTheme.pnlColor()` |

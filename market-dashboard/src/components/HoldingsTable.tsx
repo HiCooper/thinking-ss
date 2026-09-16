@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
-import { fmtInt, fmtNum, fmtPct, fmtSigned, trendClass } from '../format'
+import { fmtInt, fmtNum, fmtPct, fmtSignedYuan, fmtYuan, trendClass } from '../format'
 import { breakevenOf } from '../holdings'
 import type { GroupStat, HoldingCell } from '../holdings'
 
@@ -81,16 +81,16 @@ const COLUMNS: Column[] = [
     title: '份额 ×（现价 − 昨收），单位：元；无实时报价时为「—」',
     render: (c) => (
       <span className={trendClass(c.todayPnl)}>
-        {c.todayPnl === null ? '—' : fmtSigned(c.todayPnl, 0)}
+        {c.todayPnl === null ? '—' : fmtSignedYuan(c.todayPnl)}
       </span>
     ),
   },
-  { key: 'marketValue', label: '市值', numeric: true, render: (c) => fmtInt(c.marketValue) },
+  { key: 'marketValue', label: '市值', numeric: true, render: (c) => fmtYuan(c.marketValue) },
   {
     key: 'pnl',
     label: '浮动盈亏',
     numeric: true,
-    render: (c) => <span className={trendClass(c.pnl)}>{fmtSigned(c.pnl, 0)}</span>,
+    render: (c) => <span className={trendClass(c.pnl)}>{fmtSignedYuan(c.pnl)}</span>,
   },
   {
     key: 'pnlPct',
@@ -195,9 +195,9 @@ export default function HoldingsTable({ cells, groups }: HoldingsTableProps) {
         </div>
         <div className="chart-card__meta">
           <span className="tag">
-            当前 {rows.length} 只 · 市值 {fmtInt(sumMv)}
+            当前 {rows.length} 只 · 市值 {fmtYuan(sumMv)}
           </span>
-          <span className={`tag ${trendClass(sumPnl)}`}>盈亏 {fmtSigned(sumPnl, 0)}</span>
+          <span className={`tag ${trendClass(sumPnl)}`}>盈亏 {fmtSignedYuan(sumPnl)}</span>
         </div>
       </header>
 

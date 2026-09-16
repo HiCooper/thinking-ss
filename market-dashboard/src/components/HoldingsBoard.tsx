@@ -4,6 +4,7 @@ import HoldingsSummary from './HoldingsSummary'
 import HoldingsStructureChart from './HoldingsStructureChart'
 import HoldingsPnlChart from './HoldingsPnlChart'
 import HoldingsTable from './HoldingsTable'
+import HoldingsPnlTrendChart from './HoldingsPnlTrendChart'
 import {
   HoldingsMissingError,
   breakevenOf,
@@ -14,7 +15,9 @@ import {
   portfolioTotals,
 } from '../holdings'
 import type { HoldingQuotesFile, HoldingsFile } from '../holdings'
-import { fmtInt, fmtNum, fmtPct, fmtSigned, trendClass } from '../format'
+import { fetchHoldingsHistory } from '../holdingsHistory'
+import type { HoldingsHistory } from '../holdingsHistory'
+import { fmtNum, fmtPct, fmtSignedYuan, fmtYuan, trendClass } from '../format'
 
 /**
  * 取价轮询间隔。
@@ -27,6 +30,9 @@ import { fmtInt, fmtNum, fmtPct, fmtSigned, trendClass } from '../format'
  * 所以轮询用的是 setTimeout 链而非 setInterval，靠串行调度避免请求叠加（见下面的 effect）。
  */
 const QUOTES_POLL_MS = 5_000
+
+/** 账户收益记录的复查间隔。它是日频文件，60s 足够；只为让自动补记的那笔尽快出现。 */
+const HISTORY_POLL_MS = 60_000
 
 /**
  * 收盘后的轮询间隔。收盘价不再变动，5s 纯属空转，降到 60s。
@@ -61,6 +67,8 @@ export default function HoldingsBoard() {
   const [quotes, setQuotes] = useState<HoldingQuotesFile | null>(null)
   const [quotesLoaded, setQuotesLoaded] = useState(false)
   const [reloadKey, setReloadKey] = useState(0)
+  /** 账户收益走势记录。null = 还没有任何记录（正常状态，非错误） */
+  const [history, setHistory] = useState<HoldingsHistory | null>(null)
 
   // 静态快照：份额与成本
   useEffect(() => {
@@ -125,6 +133,27 @@ export default function HoldingsBoard() {
     }
   }, [loadQuotes])
 
+  // 日收益记录是**日频**文件，不需要跟着 5s 的报价轮询；但用 60s 的慢轮询：
+  // 启动时 `--if-due` 自动补记的那一笔会被自动加载，不必手动刷新页面。
+  useEffect(() => {
+    const controller = new AbortController()
+    const load = () => {
+      fetchHoldingsHistory(controller.signal)
+        .then((h) => {
+          if (!controller.signal.aborted) setHistory(h)
+        })
+        .catch(() => {
+          // 取不到就是「还没有记录」，渲染引导即可，不报错
+        })
+    }
+    load()
+    const id = window.setInterval(load, HISTORY_POLL_MS)
+    return () => {
+      window.clearInterval(id)
+      controller.abort()
+    }
+  }, [])
+
   const file = state.status === 'ready' ? state.file : null
 
   const cells = useMemo(() => (file ? buildCells(file, quotes) : []), [file, quotes])
@@ -182,6 +211,22 @@ cd market-dashboard && npm run holdings:export`}</pre>
   // 现价刷新口径的说明。间隔直接由常数换算，避免改了间隔忘了改文案。
   // 收盘后价格不再变动，退避到 QUOTES_POLL_CLOSED_MS，这里如实写明。
   const closed = quotes?.session.state === 'closed'
+
+  /**
+   * 收益记录是否落后于行情。
+   *
+   * 判据用**行情自带的最近交易日**（`quote_date`）而不是本地日期 —— 后者在周末/节假日
+   * 会把「今天」算成一个非交易日，导致提示一直挂着。收盘后才提示（盘中本来就没到记录时点）。
+   */
+  const lastRecordDate = history && history.days.length > 0 ? history.days[history.days.length - 1].date : null
+  const latestQuoteDate = (() => {
+    const ds = (quotes?.quotes ?? [])
+      .map((q) => q.quote_date)
+      .filter((d): d is string => d !== null)
+    return ds.length > 0 ? ds.reduce((a, b) => (a > b ? a : b)) : null
+  })()
+  const recordDue =
+    closed && latestQuoteDate !== null && (lastRecordDate === null || lastRecordDate < latestQuoteDate)
   const liveNote = !isLive
     ? '因无实时接口而降级为快照价'
     : closed
@@ -238,6 +283,15 @@ cd market-dashboard && npm run holdings:export`}</pre>
         <p className="holdings-notice muted">部分持仓取价失败：{quotes.errors.join('；')}</p>
       ) : null}
 
+      {recordDue ? (
+        <p className="holdings-notice holdings-notice--warn">
+          行情已到 <b>{latestQuoteDate}</b>，但账户收益记录停在{' '}
+          <b>{lastRecordDate ?? '（尚无记录）'}</b>：收盘后跑一次{' '}
+          <code>npm run holdings:snapshot</code> 补上 ——
+          启动看板时会自动检查并补记，页面每分钟复查一次，补上后会自动出现。
+        </p>
+      ) : null}
+
       <HoldingsSummary cells={cells} totals={totals} quotes={quotes} />
 
       <HoldingsTable cells={cells} groups={groups} />
@@ -272,17 +326,34 @@ cd market-dashboard && npm run holdings:export`}</pre>
         >
           <HoldingsPnlChart cells={cells} />
         </ChartCard>
+
+        <ChartCard
+          index="图 3"
+          title="账户收益走势"
+          subtitle="每天收盘后记录一笔账户汇总（只记真实值、不回填），可切换金额与收益率；点击上方按钮切换口径"
+          className="chart-card--wide"
+          meta={
+            <>
+              <span className="tag">账户级汇总</span>
+              <span className="tag tag--ghost">
+                {history && history.days.length > 0 ? `${history.days.length} 个交易日` : '尚无记录'}
+              </span>
+            </>
+          }
+        >
+          <HoldingsPnlTrendChart days={history?.days ?? []} />
+        </ChartCard>
       </div>
 
       <p className="footnote">
-        合计：市值 {fmtInt(totals.marketValue)} 元　·　成本 {fmtInt(totals.costValue)} 元　·　浮动盈亏{' '}
-        <span className={trendClass(totals.pnl)}>{fmtSigned(totals.pnl, 0)} 元</span>
+        合计：市值 {fmtYuan(totals.marketValue)} 元　·　成本 {fmtYuan(totals.costValue)} 元　·　浮动盈亏{' '}
+        <span className={trendClass(totals.pnl)}>{fmtSignedYuan(totals.pnl)} 元</span>
         （{fmtPct(totals.pnlPct * 100)}）　·　{be.kind === 'recover' ? '回本需涨 ' : '可回撤 '}
         {be.kind === 'recover' ? fmtPct(be.pct * 100, 1) : `${fmtNum(be.pct * 100, 1)}%`}　·　亏损 / 盈利{' '}
         {totals.losers} / {totals.winners} 只
         {totals.todayPnl !== null ? (
           <>
-            　·　今日 <span className={trendClass(totals.todayPnl)}>{fmtSigned(totals.todayPnl, 0)} 元</span>
+            　·　今日 <span className={trendClass(totals.todayPnl)}>{fmtSignedYuan(totals.todayPnl)} 元</span>
           </>
         ) : null}
       </p>
