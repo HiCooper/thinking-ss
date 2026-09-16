@@ -148,7 +148,7 @@ market-dashboard/public/holdings.json（机器可读快照，**本地文件不�
       ▼
 持仓看板（份额/成本来自这里）
       ＋
-/api/holdings（实时现价，30 秒轮询）
+/api/holdings（实时现价：交易中 5 秒轮询，收盘后 60 秒）
       ▼
 市值 / 浮动盈亏 / 距成本 = 运行时现算
 ```

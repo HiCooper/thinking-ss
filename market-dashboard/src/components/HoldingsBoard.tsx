@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import ChartCard from './ChartCard'
 import HoldingsSummary from './HoldingsSummary'
 import HoldingsStructureChart from './HoldingsStructureChart'
@@ -16,8 +16,32 @@ import {
 import type { HoldingQuotesFile, HoldingsFile } from '../holdings'
 import { fmtInt, fmtNum, fmtPct, fmtSigned, trendClass } from '../format'
 
-/** 实时报价轮询间隔：与 LiveStrip / data-version 保持一致。 */
-const QUOTES_POLL_MS = 30_000
+/**
+ * 取价轮询间隔。
+ *
+ * 定 5s 的依据：新浪行情本身约 **3s 更新一档**，比这更密拿不到新值；
+ * 而 12 次/分钟是单机轮询该接口的合理量级（一次批量请求覆盖全部持仓）。
+ * 30s 会明显「不跟手」，3s 以下纯属空转。
+ *
+ * 注意它比单次取数的超时上限（`plugin/localApi.ts` 的 `TIMEOUT_MS` = 8s）短 ——
+ * 所以轮询用的是 setTimeout 链而非 setInterval，靠串行调度避免请求叠加（见下面的 effect）。
+ */
+const QUOTES_POLL_MS = 5_000
+
+/**
+ * 收盘后的轮询间隔。收盘价不再变动，5s 纯属空转，降到 60s。
+ * 只认 `session.state === 'closed'`（即 15:00 之后）——盘前与午间休市仍按 5s，
+ * 因为集合竞价（9:15–9:25）与午间挂单都会让价格跳。
+ *
+ * ⚠️ 已知缺口：`plugin/localApi.ts` 的 `sessionOf()` 只看时分、不看星期，
+ * 所以**周末** 9:30–15:00 会被判成 'open'，仍按 5s 轮询。见 README 的说明。
+ */
+const QUOTES_POLL_CLOSED_MS = 60_000
+
+/** 下一拍该等多久，由**上一拍响应里**的交易时段决定。 */
+function nextPollDelay(sessionState: string | null): number {
+  return sessionState === 'closed' ? QUOTES_POLL_CLOSED_MS : QUOTES_POLL_MS
+}
 
 type ViewState =
   | { status: 'loading' }
@@ -60,9 +84,13 @@ export default function HoldingsBoard() {
   }, [reloadKey])
 
   // 实时报价：轮询；接口不可用（静态部署）时静默保持 null
+  /** 最近一次响应里的交易时段；决定下一拍的间隔 */
+  const sessionStateRef = useRef<string | null>(null)
+
   const loadQuotes = useCallback(async (signal: AbortSignal) => {
     const data = await fetchHoldingQuotes(signal)
     if (signal.aborted) return
+    sessionStateRef.current = data?.session.state ?? null
     setQuotes(data)
     setQuotesLoaded(true)
   }, [])
@@ -70,16 +98,29 @@ export default function HoldingsBoard() {
   useEffect(() => {
     const controller = new AbortController()
     let alive = true
-    const tick = () => {
-      void loadQuotes(controller.signal).catch(() => {
-        if (alive) setQuotesLoaded(true)
-      })
+    let timer: number | null = null
+
+    // 用 setTimeout 链而不是 setInterval：交易时段要等响应回来才知道，
+    // 固定间隔没法中途从 5s 切到 60s。每拍结束再按最新时段决定下一次等多久。
+    //
+    // 链式调度天然**串行**——下一拍只在本拍 await 结束后才安排，所以不需要 in-flight 守卫。
+    // （早先加过一道 ref 守卫，反而有害：React 18 StrictMode 会挂载两次，第一次的请求被
+    //  cleanup 中止后守卫仍为 true，把第二次挂载的首拍挡掉，页面白等一拍才拿到价。）
+    const tick = async () => {
+      try {
+        await loadQuotes(controller.signal)
+      } catch {
+        // 取数失败不是致命错误（接口不可用时静默降级为快照价）
+      }
+      if (!alive || controller.signal.aborted) return
+      setQuotesLoaded(true)
+      timer = window.setTimeout(() => void tick(), nextPollDelay(sessionStateRef.current))
     }
-    tick()
-    const id = window.setInterval(tick, QUOTES_POLL_MS)
+
+    void tick()
     return () => {
       alive = false
-      window.clearInterval(id)
+      if (timer !== null) window.clearTimeout(timer)
       controller.abort()
     }
   }, [loadQuotes])
@@ -138,6 +179,14 @@ cd market-dashboard && npm run holdings:export`}</pre>
 
   const isLive = quotes !== null && totals.liveCount > 0
   const allLive = totals.liveCount === totals.count
+  // 现价刷新口径的说明。间隔直接由常数换算，避免改了间隔忘了改文案。
+  // 收盘后价格不再变动，退避到 QUOTES_POLL_CLOSED_MS，这里如实写明。
+  const closed = quotes?.session.state === 'closed'
+  const liveNote = !isLive
+    ? '因无实时接口而降级为快照价'
+    : closed
+      ? `已收盘，每 ${QUOTES_POLL_CLOSED_MS / 1000} 秒刷新一次（收盘价不再变动）`
+      : `每 ${QUOTES_POLL_MS / 1000} 秒从新浪实时刷新`
 
   return (
     <>
@@ -150,15 +199,18 @@ cd market-dashboard && npm run holdings:export`}</pre>
           </h2>
           <p className="section-head__sub">
             共 {totals.count} 只 · 快照 {state.file.as_of} · {state.file.account}；
-            份额与成本来自 <code>holdings.md</code>，现价
-            {isLive ? '每 30 秒从新浪实时刷新' : '因无实时接口而降级为快照价'}
+            份额与成本来自 <code>holdings.md</code>，现价{liveNote}
           </p>
         </div>
         <div className="section-head__meta">
-          {isLive ? (
-            <span className="tag">实时 · {quotes?.ts}</span>
-          ) : (
+          {!isLive ? (
             <span className="tag tag--ghost">静态快照 · 无实时接口</span>
+          ) : closed ? (
+            // 收盘后仍在按 60s 取数（拿到的是收盘价），所以圆点保持红色，
+            // 但标签要与副标题口径一致，不再写「实时」。
+            <span className="tag tag--ghost">已收盘 · {quotes?.ts}</span>
+          ) : (
+            <span className="tag">实时 · {quotes?.ts}</span>
           )}
           <span className="tag tag--ghost">单位：元</span>
         </div>
