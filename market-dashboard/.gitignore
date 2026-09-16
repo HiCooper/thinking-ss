@@ -8,3 +8,6 @@ dist-ssr
 __pycache__/
 *.pyc
 *.log
+# 机器本地的 Python 解释器路径（一行），不入库
+scripts/.python-path
+

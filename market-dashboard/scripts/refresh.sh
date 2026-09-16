@@ -6,13 +6,19 @@
 #   npm run data:refresh -- --offline   # 完全不联网，纯用本地缓存重建 data.json
 #
 # 解释器查找顺序（换机器也能用，**无硬编码路径**）：
-#   $DASH_PY  →  项目本地 ./.venv-data  →  $SKILLS/ashare-data 的 venv  →  python3
+#   $DASH_PY  →  ./scripts/.python-path（机器本地，不入库）  →  ./.venv-data  →  $SKILLS/ashare-data 的 venv  →  python3
 # 没有 akshare 时：--offline 仍可用（只读仓库里的缓存）；联网更新会给出可操作的提示。
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 find_py() {
   if [ -n "${DASH_PY:-}" ] && [ -x "${DASH_PY}" ]; then echo "${DASH_PY}"; return; fi
+  # 机器本地指定（**不入库**，一行路径）：免去每次设 DASH_PY，也避免重复装一份 akshare
+  if [ -f "./scripts/.python-path" ]; then
+    local p
+    p="$(head -1 ./scripts/.python-path | tr -d '[:space:]')"
+    if [ -n "${p}" ] && [ -x "${p}" ]; then echo "${p}"; return; fi
+  fi
   if [ -x "./.venv-data/bin/python" ]; then echo "./.venv-data/bin/python"; return; fi
   if [ -n "${SKILLS:-}" ] && [ -x "${SKILLS}/ashare-data/.venv/bin/python" ]; then
     echo "${SKILLS}/ashare-data/.venv/bin/python"; return
@@ -38,6 +44,7 @@ if [ "${OFFLINE}" -eq 0 ] && ! "${PY}" -c "import akshare" >/dev/null 2>&1; then
   echo "    · npm run data:setup                      # 项目下建 .venv-data 并安装（推荐）"
   echo "    · npm run data:refresh -- --offline        # 只用仓库里的本地缓存重建"
   echo "    · DASH_PY=/path/to/python npm run data:refresh"
+  echo "    · 或把解释器路径写进 ./scripts/.python-path（一行，不入库）"
   exit 1
 fi
 
