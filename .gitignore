@@ -20,6 +20,13 @@
 # 注意：这三个文件的历史条目已用 git filter-branch 清除过一次（2026-09-16）。
 # 若将来又不小心提交了它们，光删文件不够 —— 需要同样重写历史，见 AGENTS.md。
 # ─────────────────────────────────────────────────────────────────────────────
+# macOS 元数据
+.DS_Store
+
+# 带真实持仓的截图：想给 README 配图时，用 `holdings.example.md` 的示例数据另截一张
+# （见 img/持仓看板示例.png），别把带真实金额的图入库。
+/img/持仓看板.png
+
 /holdings.md
 /calibration-log.md
 market-dashboard/public/holdings.json
