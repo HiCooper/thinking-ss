@@ -13,7 +13,7 @@
 4. **`--offline`**：完全不联网，纯用本地缓存重建 data.json（用于校验/演示/网络故障时）。
 
 用法（必须用带 akshare 的 venv；一般直接用 `npm run data:refresh`）：
-  $SKILLS/ashare-data/.venv/bin/python scripts/export_data.py [--days 250] [--offline]
+  $SKILLS/akshare-data/.venv/bin/python scripts/export_data.py [--days 250] [--offline]
 
 输出：public/data.json，并在最后打印**本次增量报告**（新增哪些日期、各序列新增多少条）。
 """

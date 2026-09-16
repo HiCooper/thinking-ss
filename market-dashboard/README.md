@@ -29,7 +29,7 @@ npm run data:refresh                  # 增量更新（联网，只抓缓存里�
 npm run data:refresh -- --offline      # 完全不联网，用仓库里的缓存重建 data.json
 ```
 
-`scripts/refresh.sh` 按 **`$DASH_PY` → `./.venv-data` → `$SKILLS/ashare-data/.venv` → `python3`** 的顺序找解释器，**无任何硬编码路径**；找不到 akshare 时给的是可操作提示（装环境 / 改用 `--offline`），不是一堆栈。
+`scripts/refresh.sh` 按 **`$DASH_PY` → `./.venv-data` → `$SKILLS/akshare-data/.venv` → `python3`** 的顺序找解释器，**无任何硬编码路径**；找不到 akshare 时给的是可操作提示（装环境 / 改用 `--offline`），不是一堆栈。
 
 ### 其他命令
 
@@ -277,7 +277,7 @@ npm run data:validate               # 只校验，不取数
 
 两个缓存都**不做裁剪**：窗口滑动时最老的日期会滑出 `data.json`，但**仍留在缓存里**——所以以后想放宽窗口（`--days 400`）只会补缺失的那部分，不会重下。
 
-> 解释器：脚本需要带 akshare 的 Python。查找顺序 `$DASH_PY` → `$SKILLS/ashare-data` 的 venv → 系统 `python3`；找不到 venv 时会警告，此时只有 `--offline` 可用。
+> 解释器：脚本需要带 akshare 的 Python。查找顺序 `$DASH_PY` → `$SKILLS/akshare-data` 的 venv → 系统 `python3`；找不到 venv 时会警告，此时只有 `--offline` 可用。
 
 页面每 30 秒自检一次数据版本（`/api/data-version` 比对 `data.json` 的 mtime/size），**更新完数据页面会自动加载新数据**，不用手动刷新。
 

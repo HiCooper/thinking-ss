@@ -6,7 +6,7 @@
 #   npm run data:refresh -- --offline   # 完全不联网，纯用本地缓存重建 data.json
 #
 # 解释器查找顺序（换机器也能用，**无硬编码路径**）：
-#   $DASH_PY  →  ./scripts/.python-path（机器本地，不入库）  →  ./.venv-data  →  $SKILLS/ashare-data 的 venv  →  python3
+#   $DASH_PY  →  ./scripts/.python-path（机器本地，不入库）  →  ./.venv-data  →  $SKILLS/akshare-data 的 venv  →  python3
 # 没有 akshare 时：--offline 仍可用（只读仓库里的缓存）；联网更新会给出可操作的提示。
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -20,8 +20,8 @@ find_py() {
     if [ -n "${p}" ] && [ -x "${p}" ]; then echo "${p}"; return; fi
   fi
   if [ -x "./.venv-data/bin/python" ]; then echo "./.venv-data/bin/python"; return; fi
-  if [ -n "${SKILLS:-}" ] && [ -x "${SKILLS}/ashare-data/.venv/bin/python" ]; then
-    echo "${SKILLS}/ashare-data/.venv/bin/python"; return
+  if [ -n "${SKILLS:-}" ] && [ -x "${SKILLS}/akshare-data/.venv/bin/python" ]; then
+    echo "${SKILLS}/akshare-data/.venv/bin/python"; return
   fi
   if command -v python3 >/dev/null 2>&1; then echo "python3"; return; fi
   echo ""

@@ -323,7 +323,7 @@ npm run data:refresh    # 增量更新（联网，只抓缓存里没有的日期
 npm run data:validate   # 校验结果
 ```
 
-- `scripts/refresh.sh` 按 `$DASH_PY` → `scripts/.python-path` → `./.venv-data` → `$SKILLS/ashare-data/.venv` → `python3` 的顺序找解释器（后两个是本机路径，新机器上通常不存在，会落到 `python3`）。
+- `scripts/refresh.sh` 按 `$DASH_PY` → `scripts/.python-path` → `./.venv-data` → `$SKILLS/akshare-data/.venv` → `python3` 的顺序找解释器（后两个是本机路径，新机器上通常不存在，会落到 `python3`）。
 - 没有 akshare 时给的是可操作提示（装环境 / 改用 `--offline`），不是栈回溯。
 - 完全离线重建：`npm run data:refresh -- --offline`（用仓库里的 `scripts/.turnover_cache.json` 与 `.series_cache.json`）。
 - 数据是**增量**的：每天跑一次通常只抓 1 天，2–4 秒。跑完页面 ≤30 秒自动加载新数据（`/api/data-version` 轮询比对 mtime/size）。
