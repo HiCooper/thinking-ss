@@ -19,9 +19,29 @@ export default function Dashboard({ data }: { data: MarketData }) {
     return first === last ? first : `${first} ~ ${last}`
   }, [rows])
 
+  const lastDate = rows.length > 0 ? rows[rows.length - 1].date : ''
+
   return (
     <>
       <LiveStrip />
+
+      {/* 历史数据板块标题：与「实时行情」表头同款语言，但圆点用静态灰以区分「非实时」 */}
+      <section className="section-head">
+        <div className="section-head__wrap">
+          <h2 className="section-head__title">
+            <span className="section-head__dot" aria-hidden="true" />
+            历史行情（日频）
+          </h2>
+          <p className="section-head__sub">
+            交易所收盘口径的日频序列，共 {rows.length} 个交易日 · 区间 {range || '—'}；
+            由 <code>npm run data:refresh</code> 增量更新，页面检测到数据变化会自动重载
+          </p>
+        </div>
+        <div className="section-head__meta">
+          <span className="tag tag--ghost">截至 {lastDate || '—'} 收盘</span>
+          <span className="tag tag--ghost">EOD · 日频</span>
+        </div>
+      </section>
 
       <SummaryCards rows={rows} />
 
