@@ -24,6 +24,10 @@ interface Metric {
  *
  * 约定：`holdings.ts` 里的比率一律是**小数**（-0.185），而 `fmtPct` 收的是**百分数**（-18.5），
  * 所以传给 fmtPct 之前统一 ×100。「距成本」的双向语义由 `breakevenOf` 统一判定。
+ *
+ * **这里没有「价格口径」卡**：报价时间、快照回退只数、降级原因已经在四处呈现，再占一张卡是重复——
+ * 区块标题右侧的 `实时 · 时间` 标签、降级时的黄色提示条、明细表每行的快照小圆点、表格副标题说明。
+ * 栅格是 4 列，4 张卡正好一行，与大盘看板一致。
  */
 export default function HoldingsSummary({ cells, totals, quotes }: HoldingsSummaryProps) {
   const metrics = useMemo<Metric[]>(() => {
@@ -33,7 +37,6 @@ export default function HoldingsSummary({ cells, totals, quotes }: HoldingsSumma
         ? (totals.todayPnl / totals.marketValue) * 100
         : null
     const be = breakevenOf(totals)
-    const snapshotCount = totals.count - totals.liveCount
 
     return [
       {
@@ -122,26 +125,6 @@ export default function HoldingsSummary({ cells, totals, quotes }: HoldingsSumma
             text: `${cells.filter((c) => (c.chgPct ?? 0) > 0).length} / ${
               cells.filter((c) => (c.chgPct ?? 0) < 0).length
             } 只`,
-          },
-        ],
-      },
-      {
-        key: 'source',
-        label: '价格口径',
-        value: `${totals.liveCount}`,
-        unit: `/ ${totals.count} 实时`,
-        trend: null,
-        hint: quotes ? quotes.ts : '快照',
-        details: [
-          {
-            label: '报价时间',
-            text: quotes ? quotes.ts : '无实时接口',
-            title: '来自 /api/holdings（Vite 插件代理新浪 hq.sinajs.cn）',
-          },
-          {
-            label: '快照回退',
-            text: snapshotCount > 0 ? `${snapshotCount} 只使用快照价` : '全部实时',
-            trend: snapshotCount > 0 ? -1 : null,
           },
         ],
       },

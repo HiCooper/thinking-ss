@@ -116,7 +116,7 @@ cd market-dashboard && npm run typecheck && npm run build                       
 有条件用无头浏览器时，再确认渲染结果（这是真正能证明「跑起来了」的检查）：
 
 - 大盘看板：4 张摘要卡、5 张图（`canvas` 5 个）、3 张实时报价卡、底部固定指数条 5 个指数
-- 持仓看板：明细行数 = `holdings.json` 里的条数、2 张图、总览卡 5 张
+- 持仓看板：明细行数 = `holdings.json` 里的条数、2 张图、总览卡 4 张
 - 控制台**无未捕获异常**
 
 用 Chrome 无头 + CDP 自查时，**测试完把 Chrome 实例和端口进程杀掉**，别留在后台。

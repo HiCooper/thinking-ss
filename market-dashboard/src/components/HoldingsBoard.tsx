@@ -188,6 +188,8 @@ cd market-dashboard && npm run holdings:export`}</pre>
 
       <HoldingsSummary cells={cells} totals={totals} quotes={quotes} />
 
+      <HoldingsTable cells={cells} groups={groups} />
+
       <div className="chart-grid">
         <ChartCard
           index="图 1"
@@ -219,8 +221,6 @@ cd market-dashboard && npm run holdings:export`}</pre>
           <HoldingsPnlChart cells={cells} />
         </ChartCard>
       </div>
-
-      <HoldingsTable cells={cells} groups={groups} />
 
       <p className="footnote">
         合计：市值 {fmtInt(totals.marketValue)} 元　·　成本 {fmtInt(totals.costValue)} 元　·　浮动盈亏{' '}
