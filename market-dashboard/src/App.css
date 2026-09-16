@@ -445,11 +445,11 @@
   list-style: none;
 }
 
-/* 每格内部：名称靠左、价格与涨跌幅靠右（两端对齐） */
+/* 每格内部：名称 / 价格 / 涨跌幅 依次靠左排列（间距由 gap 控制） */
 .live-index {
   display: flex;
   align-items: baseline;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 7px;
   min-width: 0;
   font-size: 12px;
