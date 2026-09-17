@@ -16,6 +16,10 @@ export const C = {
   star50: '#8e5bb5',
   /** 图 5：韩国 KOSPI */
   kospi: '#d97706',
+  /** 持仓看板 图 1：日收益金额（左轴，实线 + 面积） */
+  pnlTrendAmount: '#1f3a5f',
+  /** 持仓看板 图 1：日收益率（右轴，虚线 + 空心圈） */
+  pnlTrendPct: '#e0a33e',
   axisLine: '#dfe3e9',
   splitLine: '#eef1f5',
   axisLabel: '#7a8699',

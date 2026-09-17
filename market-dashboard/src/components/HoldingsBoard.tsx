@@ -333,6 +333,23 @@ cd market-dashboard && npm run holdings:export`}</pre>
       <div className="chart-grid">
         <ChartCard
           index="图 1"
+          title="账户收益走势"
+          subtitle="每天收盘后记录一笔账户汇总（只记真实值、不回填）；左轴为「日收益金额」、右轴为「日收益率」，两条线同时画，点图例可只看其中一条"
+          className="chart-card--wide"
+          meta={
+            <>
+              <span className="tag">账户级汇总</span>
+              <span className="tag tag--ghost">
+                {history && history.days.length > 0 ? `${history.days.length} 个交易日` : '尚无记录'}
+              </span>
+            </>
+          }
+        >
+          <HoldingsPnlTrendChart days={history?.days ?? []} />
+        </ChartCard>
+
+        <ChartCard
+          index="图 2"
           title="分组结构：市值占比 vs 盈亏贡献"
           subtitle="两根条越不成比例，说明这组对总盈亏的影响远超它的仓位占比——亏损组向左、盈利组向右，0 处为参考线"
           className="chart-card--wide"
@@ -347,7 +364,7 @@ cd market-dashboard && npm run holdings:export`}</pre>
         </ChartCard>
 
         <ChartCard
-          index="图 2"
+          index="图 3"
           title="个股盈亏排行"
           subtitle="按盈亏金额排序（最惨在最上，盈利的在下方），颜色深浅表示盈亏幅度；金额与幅度不一致时以金额看痛点"
           className="chart-card--wide"
@@ -359,23 +376,6 @@ cd market-dashboard && npm run holdings:export`}</pre>
           }
         >
           <HoldingsPnlChart cells={cells} />
-        </ChartCard>
-
-        <ChartCard
-          index="图 3"
-          title="账户收益走势"
-          subtitle="每天收盘后记录一笔账户汇总（只记真实值、不回填），可切换金额与收益率；点击上方按钮切换口径"
-          className="chart-card--wide"
-          meta={
-            <>
-              <span className="tag">账户级汇总</span>
-              <span className="tag tag--ghost">
-                {history && history.days.length > 0 ? `${history.days.length} 个交易日` : '尚无记录'}
-              </span>
-            </>
-          }
-        >
-          <HoldingsPnlTrendChart days={history?.days ?? []} />
         </ChartCard>
       </div>
 

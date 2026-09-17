@@ -129,37 +129,38 @@ export default function App() {
         </div>
       ) : null}
 
-      <header className="topbar">
-        <div className="topbar__brand">
-          <span className="topbar__dot" aria-hidden="true" />
-          <h1 className="topbar__title">{meta.title}</h1>
-          <span className="topbar__sub">{meta.sub}</span>
+      {/* 顶栏不再单独放一份标题——可见的「标题」就是下面的 tab 本身，重复一遍只是浪费一行高度。
+          页面仍需要一个 h1，所以留一个只给读屏的。 */}
+      <h1 className="visually-hidden">{meta.title}</h1>
+
+      <header className="headerbar">
+        <nav className="viewtabs" aria-label="看板切换">
+          {(['market', 'holdings'] as const).map((v) => (
+            <button
+              key={v}
+              type="button"
+              className={`viewtab${view === v ? ' viewtab--active' : ''}`}
+              aria-current={view === v ? 'page' : undefined}
+              onClick={() => setView(v)}
+            >
+              {VIEW_META[v].title}
+            </button>
+          ))}
+        </nav>
+
+        <div className="headerbar__meta">
+          <span className="headerbar__sub">{meta.sub}</span>
+          {/* 大盘看板显示 data.json 的生成时间；持仓看板的时间信息在板块标题里，这里不显示 */}
+          {view === 'market' ? (
+            <span className="headerbar__time">
+              数据生成时间 <b className="num">{data ? data.generated_at : '—'}</b>
+            </span>
+          ) : null}
         </div>
-        {/* 大盘看板显示 data.json 的生成时间；持仓看板的时间信息在板块标题里，这里留空 */}
-        {view === 'market' ? (
-          <div className="topbar__meta">
-            <span className="topbar__meta-label">数据生成时间</span>
-            <span className="topbar__meta-value num">{data ? data.generated_at : '—'}</span>
-          </div>
-        ) : null}
       </header>
 
-      <nav className="viewtabs" aria-label="看板切换">
-        {(['market', 'holdings'] as const).map((v) => (
-          <button
-            key={v}
-            type="button"
-            className={`viewtab${view === v ? ' viewtab--active' : ''}`}
-            aria-current={view === v ? 'page' : undefined}
-            onClick={() => setView(v)}
-          >
-            {VIEW_META[v].title}
-          </button>
-        ))}
-      </nav>
-
-      <p className="topbar__sources">
-        <span className="topbar__sources-label">数据来源</span>
+      <p className="headerbar__sources">
+        <span className="headerbar__sources-label">数据来源</span>
         {view === 'market' ? (data?.sources ? data.sources : '—') : meta.sources}
       </p>
 

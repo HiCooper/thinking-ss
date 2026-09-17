@@ -121,7 +121,7 @@ cd market-dashboard && npm run typecheck && npm run build                       
 有条件用无头浏览器时，再确认渲染结果（这是真正能证明「跑起来了」的检查）：
 
 - 大盘看板：4 张摘要卡、5 张图（`canvas` 5 个）、3 张实时报价卡、底部固定指数条 5 个指数
-- 持仓看板：明细行数 = `holdings.json` 里的条数、**3 张图**、总览卡 4 张（图 3 在记录不足 2 天时渲染引导而非空图）
+- 持仓看板：明细行数 = `holdings.json` 里的条数、**3 张图**（图 1 账户收益走势｜图 2 分组结构｜图 3 个股盈亏排行，图 1 在最前）、总览卡 4 张（图 1 在完全没有记录时渲染引导而非空图；有记录但首日无 `day_pnl` 时在图内提示需要至少两笔）
 - 控制台**无未捕获异常**
 
 用 Chrome 无头 + CDP 自查时，**测试完把 Chrome 实例和端口进程杀掉**，别留在后台。
@@ -250,7 +250,7 @@ cp holdings.example.md holdings.md     # 在仓库根目录执行
 
 格式契约（`scripts/export_holdings.py` 会逐条校验）：
 
-1. **分组标题必须是 `### 单个大写字母. 组名`**（如 `### A. 半导体`）。分组不是装饰——持仓看板「图 1 分组结构」直接依赖它，**没有分组这张图就没意义**。按用户的实际结构分 2–5 组（按主题/资产类别，别按基金公司分）。
+1. **分组标题必须是 `### 单个大写字母. 组名`**（如 `### A. 半导体`）。分组不是装饰——持仓看板「图 2 分组结构」直接依赖它，**没有分组这张图就没意义**。按用户的实际结构分 2–5 组（按主题/资产类别，别按基金公司分）。
 2. 每个分组下的明细表必须有 **7 列且顺序固定**：`名称 | 份额 | 现价 | 成本 | 市值 | 盈亏 | 盈亏%`；表头第一格必须是 `名称`（**其余列名不校验**，叫 `浮亏` 还是 `盈亏` 都能解析）。
 3. **`市值` 必须等于 `份额 × 现价`**（容差 0.5%）。脚本用它校验有没有读错列——用 B4 抓到的现价自己算一遍，别直接抄 App 上可能被截断的数字。
 4. **`成本` 与 `盈亏%` 两列脚本不读**（只给人看），可以填粗略值。因为脚本用 `成本 = (市值 − 盈亏) / 份额` **反推精确成本价**——App 显示的 `0.773` 是四舍五入值，拿它算总成本会差几元。
@@ -316,6 +316,7 @@ python3 scripts/export_holdings.py --check  # 只校验不写文件
 | `src/holdings.ts` | `GroupStat.pnlContribution` 是**有符号**的；新增派生指标时保持对正负都成立 |
 | `src/components/HoldingsStructureChart.tsx` | 发散条形图：`yAxis.axisLine.onZero = false` 让类目名贴左（否则压在负向条上），0 处靠 `markLine` 标出 |
 | `src/components/HoldingsPnlChart.tsx` | `xAxis` 的 `min/max` 必须同时覆盖正负；配色用 `chartTheme.pnlColor()` |
+| `src/components/HoldingsPnlTrendChart.tsx` | 持仓图 1，**当日**口径双轴：左轴 `day_pnl`（刻度**直接用「元」**、千分位整数 + `元` 后缀，**不要再折成「万」**——日盈亏量级就在千元上下，「0.62万」既多一次心算又和 tooltip 的「+6,210.29 元」对不上）、右轴 `day_pnl_pct`（分母是昨收市值，**不要**换成累计 `pnl`/`pnl_pct`）。两者都可为 `null`（首日无前收）——`connectNulls: false` 断线、量程计算要先滤 null、全 null 时用 `graphicNotice` 在图内提示 |
 | `src/components/HoldingsTable.tsx` | 「距成本」的文案与颜色、发散微条方向（`.holdings-pnlbar__fill.is-loss/.is-gain`） |
 
 ---
