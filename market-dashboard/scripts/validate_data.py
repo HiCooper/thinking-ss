@@ -15,7 +15,8 @@ DATA = ROOT / "public" / "data.json"
 NUM_KEYS = ["turnover_sh", "turnover_sz", "turnover_total", "float_mktcap",
             "turnover_ratio", "us10y", "cn10y",
             "margin_rz", "margin_rq", "margin_total", "margin_rz_ratio",
-            "kospi", "star50"]
+            "kospi", "star50", "hs300",
+            "breadth_high20", "breadth_low20", "adv_count", "dec_count"]
 RANGES = {                      # (下限, 上限) 用于捕捉单位错误（万元/元 误当 亿元 之类的量级错）
     "turnover_sh": (500, 60000), "turnover_sz": (500, 60000), "turnover_total": (1000, 100000),
     "us10y": (-2, 20), "cn10y": (-2, 20),
@@ -24,6 +25,11 @@ RANGES = {                      # (下限, 上限) 用于捕捉单位错误（�
     "turnover_ratio": (0, 20),            # 全市场换手率 %
     "margin_rz_ratio": (0, 20),           # 杠杆率 %
     "kospi": (1000, 20000), "star50": (200, 10000),
+    "hs300": (2000, 12000),               # 沪深300 点位（2015 年高点 5380，留足余量）
+    "breadth_high20": (0, 6000),          # 全A 创20日新高家数（约 5400 只股票上限）
+    "breadth_low20": (0, 6000),           # 全A 创20日新低家数
+    "adv_count": (0, 6000),               # 上涨家数（快照口径，收盘后逐日累积）
+    "dec_count": (0, 6000),               # 下跌家数
 }
 MIN_ROWS = 60
 

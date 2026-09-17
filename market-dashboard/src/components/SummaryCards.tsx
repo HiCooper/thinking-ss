@@ -11,6 +11,7 @@ import {
 } from '../calc'
 import { fmtBp, fmtInt, fmtNum, fmtPct, fmtSigned, trendClass, isNum } from '../format'
 import { PERCENTILE_WINDOW, percentileInfo } from '../stats'
+import { trendStateOf } from '../trend'
 import type { MarketRow } from '../types'
 
 interface SummaryCardsProps {
@@ -27,6 +28,8 @@ interface Metric {
   pctRank?: number | null
   /** 主数值的涨跌方向（红涨绿跌） */
   trend?: number | null
+  /** 结论卡：通栏展示（趋势状态置顶） */
+  wide?: boolean
   details: { label: string; text: string; trend?: number | null; title?: string }[]
 }
 
@@ -76,6 +79,23 @@ export default function SummaryCards({ rows }: SummaryCardsProps) {
       return `${tChangeAmt > 0 ? '放量' : '缩量'} ${fmtSigned(tChangeAmt, 1)}亿`
     })()
 
+    // —— 趋势状态（沪深300 × MA20/MA60）——
+    // 摘要卡的「结论层」：前面四张卡是资金/情绪的输入，这张直接给环境识别的读数。
+    // 判定逻辑在 src/trend.ts，与图 1（趋势图）共用同一份 —— 卡与图的结论永远一致。
+    // 放在第一位并通栏：先看结论，再看支撑结论的资金面读数。
+    const trend = trendStateOf(rows)
+    const trendFmt = (v: number | null) => (isNum(v) ? `${fmtSigned(v, 1)}%` : '—')
+
+    // —— 市场宽度读数（趋势卡的支撑证据）——
+    // 创新高/新低有全量历史；涨跌家数是快照口径、收盘后逐日累积，历史没攒够就如实显示 —
+    const bh = latestWith(rows, 'breadth_high20')
+    const bl = latestWith(rows, 'breadth_low20')
+    const bhV = bh?.value ?? null
+    const blV = bl?.value ?? null
+    const breadthNet = isNum(bhV) && isNum(blV) ? bhV - blV : null
+    const adv = latestWith(rows, 'adv_count')
+    const dec = latestWith(rows, 'dec_count')
+
     // —— 10Y 美债 ——
     const us = latestWith(rows, 'us10y')
     const usPrev = us ? prevNonNull(rows, 'us10y', us.index) : null
@@ -102,6 +122,59 @@ export default function SummaryCards({ rows }: SummaryCardsProps) {
     const rq = valueOf(mRow, 'margin_rq')
 
     return [
+      {
+        key: 'trend',
+        label: `趋势状态 · 沪深300${trend.date ? `（${trend.date}）` : ''}`,
+        value: trend.state ?? '样本不足',
+        unit: '',
+        trend: trend.trend,
+        wide: true,
+        hint: undefined,
+        details: [
+          {
+            label: '收盘',
+            text: isNum(trend.close) ? fmtNum(trend.close, 2) : '—',
+            title: trend.basis,
+          },
+          {
+            label: '距 MA20',
+            text: trendFmt(trend.dev20),
+            trend: trend.dev20,
+            title: '收盘价相对 20 日均线的偏离：正 = 站上，负 = 跌破',
+          },
+          {
+            label: '距 MA60',
+            text: trendFmt(trend.dev60),
+            trend: trend.dev60,
+            title: '收盘价相对 60 日均线的偏离：正 = 站上，负 = 跌破',
+          },
+          {
+            label: 'MA20 斜率（20日）',
+            text: trendFmt(trend.slope),
+            trend: trend.slope,
+            title: 'MA20 自身与 20 个交易日前比的方向：均线发散向上 / 走平 / 向下',
+          },
+          {
+            label: '20 日涨跌',
+            text: trendFmt(trend.chg20),
+            trend: trend.chg20,
+            title: '沪深300 收盘价的 20 日动量',
+          },
+          {
+            label: '20日新高/新低',
+            text: `${fmtInt(bhV)} / ${fmtInt(blV)} 家`,
+            trend: breadthNet,
+            title: '全A 创20日新高与创20日新低的个股数（最新可得交易日）。' +
+              '净宽度（新高−新低）为正＝宽度扩张；价格在均线上方而新高萎缩＝趋势衰减的第一信号',
+          },
+          {
+            label: '涨/跌家数',
+            text: `${fmtInt(adv?.value ?? null)} / ${fmtInt(dec?.value ?? null)}`,
+            trend: isNum(adv?.value) && isNum(dec?.value) ? adv.value - dec.value : null,
+            title: '全市场上涨/下跌家数（乐咕快照口径）。该数据没有历史接口，从启用日起收盘后逐日累积，攒够前如实显示 —',
+          },
+        ],
+      },
       {
         key: 'turnover',
         label: '两市成交额',
@@ -184,7 +257,7 @@ export default function SummaryCards({ rows }: SummaryCardsProps) {
   return (
     <div className="summary-grid">
       {metrics.map((m) => (
-        <article className="card summary-card" key={m.key}>
+        <article className={`card summary-card${m.wide ? ' summary-card--wide' : ''}`} key={m.key}>
           <div className="summary-card__label">
             {m.label}
             <span className="summary-card__label-right">

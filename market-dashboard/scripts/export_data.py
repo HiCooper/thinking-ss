@@ -239,6 +239,81 @@ def fetch_star50():
     return {d: round(c, 2) for d, c in tx_daily("sh000688", 400)}
 
 
+def fetch_hs300():
+    """沪深300 日K（腾讯，与科创50 同源同口径）。取 400 天：前端要算 MA60，
+    窗口 250 天时给足前值，MA60 能从窗口起点就画出来（多的 150 天只进缓存不进输出）。"""
+    return {d: round(c, 2) for d, c in tx_daily("sh000300", 400)}
+
+
+# ---------------- 市场宽度（乐咕乐股）----------------
+# 创新高/新低：stock_a_high_low_statistics 返回**全量历史**（约两年），一次拉全、按日并入缓存。
+# 当日未定稿的行也会被下一次全量拉取覆盖（与腾讯日K同一道理），不怕脏值。
+# 涨跌家数：只有**当日快照**，没有历史 —— 盘中拉到的是半天的读数，且永远不会被覆盖，
+# 所以必须「未定稿不入缓存」，否则那半天的数会永远留在缓存里污染那一天。
+_HL_RAW = None
+
+
+def _fetch_high_low_raw():
+    global _HL_RAW
+    _require("akshare", ak)
+    _require("pandas", pd)
+    if _HL_RAW is None:
+        df = ak.stock_a_high_low_statistics(symbol="all")
+        df["date"] = pd.to_datetime(df["date"]).dt.strftime("%Y-%m-%d")
+        _HL_RAW = df
+    return _HL_RAW
+
+
+def fetch_breadth_high():
+    df = _fetch_high_low_raw()
+    return dict(zip(df["date"], pd.to_numeric(df["high20"], errors="coerce").round(0)))
+
+
+def fetch_breadth_low():
+    df = _fetch_high_low_raw()
+    return dict(zip(df["date"], pd.to_numeric(df["low20"], errors="coerce").round(0)))
+
+
+_AD_RAW = None
+
+
+def _fetch_activity_raw():
+    global _AD_RAW
+    _require("akshare", ak)
+    if _AD_RAW is None:
+        _AD_RAW = ak.stock_market_activity_legu()
+    return _AD_RAW
+
+
+def _activity_ready():
+    """涨跌家数快照是否已定稿：快照日期不是今天（历史快照）→ 定稿；
+    是今天则要过了 15:05（与日K同一约定）。未定稿一律返回空，不进缓存。"""
+    df = _fetch_activity_raw()
+    snap = str(df.loc[df["item"] == "统计日期", "value"].iloc[0])[:10]
+    now = beijing_now()
+    if not kline_ok(snap, now.strftime("%Y-%m-%d"), now.hour * 60 + now.minute >= KLINE_FINAL_MINUTES):
+        return None
+    return snap
+
+
+def fetch_adv_count():
+    snap = _activity_ready()
+    if snap is None:
+        return {}
+    df = _fetch_activity_raw()
+    v = float(df.loc[df["item"] == "上涨", "value"].iloc[0])
+    return {snap: round(v)}
+
+
+def fetch_dec_count():
+    snap = _activity_ready()
+    if snap is None:
+        return {}
+    df = _fetch_activity_raw()
+    v = float(df.loc[df["item"] == "下跌", "value"].iloc[0])
+    return {snap: round(v)}
+
+
 # ---------------- 前值填充 ----------------
 def fill_forward(series, days):
     """按 A 股日历前值填充（海外休市沿用上一收盘；窗口起点之前取最近一个已知值）。"""
@@ -277,6 +352,11 @@ def main():
         ("margin_rq", "融券余额", lambda: fetch_margin("融券余额")),
         ("kospi", "韩国KOSPI", fetch_kospi),
         ("star50", "科创50", fetch_star50),
+        ("hs300", "沪深300", fetch_hs300),
+        ("breadth_high20", "创新20日高", fetch_breadth_high),
+        ("breadth_low20", "创20日新低", fetch_breadth_low),
+        ("adv_count", "上涨家数", fetch_adv_count),
+        ("dec_count", "下跌家数", fetch_dec_count),
     ]
     series, lines = {}, []
     for key, label, fn in defs:
@@ -298,7 +378,7 @@ def main():
     if not today_final and today_bj in days:
         report.append(
             f"⚠ {today_bj} 未到 {KLINE_FINAL_MINUTES // 60}:{KLINE_FINAL_MINUTES % 60:02d}（北京时间 "
-            f"{now_bj:%H:%M}），KOSPI / 科创50 的当日值视为未定稿 → **置空**（与两融同一约定）"
+            f"{now_bj:%H:%M}），KOSPI / 科创50 / 沪深300 的当日值视为未定稿 → **置空**（与两融同一约定）"
         )
 
     rows = []
@@ -319,6 +399,11 @@ def main():
             "margin_rz_ratio": round(rz_d / float_cap * 100, 3) if (rz_d is not None and float_cap) else None,
             "kospi": kospi.get(d) if kline_ok(d, today_bj, today_final) else None,
             "star50": series["star50"].get(d) if kline_ok(d, today_bj, today_final) else None,
+            "hs300": series["hs300"].get(d) if kline_ok(d, today_bj, today_final) else None,
+            "breadth_high20": series["breadth_high20"].get(d) if kline_ok(d, today_bj, today_final) else None,
+            "breadth_low20": series["breadth_low20"].get(d) if kline_ok(d, today_bj, today_final) else None,
+            "adv_count": series["adv_count"].get(d) if kline_ok(d, today_bj, today_final) else None,
+            "dec_count": series["dec_count"].get(d) if kline_ok(d, today_bj, today_final) else None,
         })
 
     payload = {
@@ -326,7 +411,8 @@ def main():
         "sources": "成交额与流通市值=上交所/深交所官方日度（stock_sse_deal_daily + stock_szse_summary）；"
                    "国债收益率=新浪全球国债（US10YT/CN10YT，按A股日历前值填充）；"
                    "两融=沪深交易所宏观序列（akshare macro_china_market_margin_sh/sz）；"
-                   "KOSPI=新浪 index_global_hist_sina（东财兜底）；科创50=腾讯日K。"
+                   "KOSPI=新浪 index_global_hist_sina（东财兜底）；科创50=腾讯日K；沪深300=腾讯日K；"
+                   "市场宽度（创新高/新低家数、涨跌家数）=乐咕乐股（全量历史 + 当日快照，快照口径收盘后逐日累积）。"
                    "金额单位：亿元；收益率单位：%；指数单位：点；比率为 %。",
         "range": {"start": days[0], "end": days[-1], "trading_days": len(days)},
         "rows": rows,
@@ -339,7 +425,8 @@ def main():
     log(f"已写出 {OUT}（{size_kb:.1f} KB，耗时 {time.time() - t_start:.1f}s）")
     log("  非空：" + "｜".join(f"{k} {n(k)}" for k in
         ("turnover_total", "float_mktcap", "us10y", "cn10y", "margin_total",
-         "margin_rz_ratio", "turnover_ratio", "kospi", "star50")))
+         "margin_rz_ratio", "turnover_ratio", "kospi", "star50", "hs300",
+         "breadth_high20", "breadth_low20", "adv_count", "dec_count")))
 
     # ---- 增量报告（stdout，给 npm run data:refresh 用） ----
     print("─" * 68)

@@ -15,9 +15,9 @@ const tickerHost = (): HTMLElement | null =>
   typeof document === 'undefined' ? null : document.getElementById('ticker-root')
 
 /**
- * 实时面板：挂在摘要卡上方，展示两市成交额 / A50 / KOSPI / KOSDAQ。
+ * 实时面板：展示跨市场报价（A50 / KOSPI / NQ / 恒生科技 + 黄金 / 白银 / WTI / VIX）。
  *
- * 数据来自本地接口 `/api/spot`（Vite 服务端代理新浪 hq.sinajs.cn）。
+ * 数据来自本地接口 `/api/spot`（Vite 服务端代理新浪 hq.sinajs.cn 与 CBOE 官方延迟接口）。
  * 静态部署下该接口不存在 → 只显示一条浅色提示并隐藏数值，不白屏、不抛错。
  */
 export default function LiveStrip() {
@@ -67,6 +67,10 @@ export default function LiveStrip() {
   const nq = data?.nq ?? null
   const kospi = data?.korea?.kospi ?? null
   const hstech = data?.hstech ?? null
+  const gold = data?.futures?.gold ?? null
+  const silver = data?.futures?.silver ?? null
+  const wti = data?.futures?.wti ?? null
+  const qvix = data?.qvix ?? null
   const session = data?.session
 
   // 指数信息条：portal 到 #ticker-root（fixed 钉在屏幕底部）。容器缺失时退化为原地渲染，
@@ -177,6 +181,42 @@ export default function LiveStrip() {
               time={hstech?.time ?? null}
               name="HSTECH"
               spark={data?.spark.hstech ?? null}
+            />
+            {/* 大宗与波动率：上面四张全是「风险资产」，这两行补避险 / 大宗 / 恐慌维度。
+                黄金 = 避险与实际利率代理；WTI 对应油气化工板块；
+                QVIX 是 50ETF 期权的隐含波动率（中国波指，VIX 的国内对应物）——
+                隐波飙升 = 期权市场在为剧烈波动买保险，对应 A 股情绪转恐慌 */}
+            <QuoteTile
+              label="COMEX 黄金"
+              price={gold?.price ?? null}
+              chg={gold?.chg_pct ?? null}
+              time={gold?.time ?? null}
+              name="GOLD"
+              spark={data?.spark.gold ?? null}
+            />
+            <QuoteTile
+              label="COMEX 白银"
+              price={silver?.price ?? null}
+              chg={silver?.chg_pct ?? null}
+              time={silver?.time ?? null}
+              name="SILVER"
+              spark={data?.spark.silver ?? null}
+            />
+            <QuoteTile
+              label="WTI 原油"
+              price={wti?.price ?? null}
+              chg={wti?.chg_pct ?? null}
+              time={wti?.time ?? null}
+              name="WTI"
+              spark={data?.spark.wti ?? null}
+            />
+            <QuoteTile
+              label="50ETF 期权 QVIX"
+              price={qvix?.price ?? null}
+              chg={qvix?.chg_pct ?? null}
+              time={qvix?.time ?? null}
+              name="QVIX"
+              spark={data?.spark.qvix ?? null}
             />
           </div>
 

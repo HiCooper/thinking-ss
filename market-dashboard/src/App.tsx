@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import './App.css'
 import Dashboard from './components/Dashboard'
 import HoldingsBoard from './components/HoldingsBoard'
+import NewsDock from './components/NewsDock'
 import { DataMissingError, fetchDataVersion, fetchMarketData } from './api'
 import type { MarketData } from './types'
 
@@ -15,12 +16,12 @@ type View = 'market' | 'holdings'
 
 const VIEW_META: Record<View, { title: string; sub: string; sources: string }> = {
   market: {
-    title: '大盘看板',
+    title: '大盘趋势',
     sub: 'A 股市场情绪与流动性',
     sources: '',
   },
   holdings: {
-    title: '我的持仓看板',
+    title: '我的持仓',
     sub: '持仓结构、盈亏与距成本缺口',
     sources:
       '份额与成本来自本地 holdings.md（隐私文件、不入库；模板见 holdings.example.md）· 现价来自新浪财经 hq.sinajs.cn（本地接口代理）',
@@ -123,6 +124,9 @@ export default function App() {
 
   return (
     <div className="app">
+      {/* 折叠式快讯坞：只挂在大盘趋势页；收起时是右侧窄竖条，不占布局 */}
+      <NewsDock active={view === 'market'} />
+
       {toast ? (
         <div className="toast num" role="status">
           {toast}

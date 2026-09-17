@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import ChartCard from './ChartCard'
 import SummaryCards from './SummaryCards'
+import TrendChart from './TrendChart'
 import TurnoverChart from './TurnoverChart'
 import YieldChart from './YieldChart'
 import MarginChart from './MarginChart'
@@ -59,10 +60,26 @@ export default function Dashboard({ data }: { data: MarketData }) {
 
       <SummaryCards rows={rows} />
 
-      {/* 两列网格：图1｜图2 / 图3｜图4，图5 跨两列（归一化对比线宽一点更清楚） */}
+      {/* 图表网格：图1（趋势，通栏）→ 图2｜图3 → 图4｜图5 → 图6 通栏（归一化对比线宽一点更清楚） */}
       <div className="chart-grid">
         <ChartCard
           index="图 1"
+          title="沪深300 趋势（收盘价 + MA20/MA60）"
+          subtitle="环境识别的第一问「趋势在不在」：价格站上/跌破 MA20 的区段以底色标出（浅红=上方，浅绿=下方），结论见上方「趋势状态」卡"
+          className="chart-card--wide"
+          meta={
+            <>
+              <span className="tag">单位：点</span>
+              <span className="tag tag--ghost">均线自第 20/60 个交易日起画</span>
+              <span className="tag tag--ghost">样本 {rows.length} 个交易日</span>
+            </>
+          }
+        >
+          <TrendChart rows={rows} />
+        </ChartCard>
+
+        <ChartCard
+          index="图 2"
           title="两市总成交额走势"
           subtitle="沪深合计成交额与 20 日均线，用于观察量能趋势与放量/缩量拐点"
           meta={
@@ -76,7 +93,7 @@ export default function Dashboard({ data }: { data: MarketData }) {
         </ChartCard>
 
         <ChartCard
-          index="图 2"
+          index="图 3"
           title="国际市场联动（国债收益率）"
           subtitle="美国 10 年期与中国 10 年期国债收益率同轴对比，利差以 bp 计"
           meta={
@@ -90,7 +107,7 @@ export default function Dashboard({ data }: { data: MarketData }) {
         </ChartCard>
 
         <ChartCard
-          index="图 3"
+          index="图 4"
           title="融资融券"
           subtitle="融资余额（左轴）与融券余额（右轴）双轴展示，量级差异大，读数请对应各自坐标轴"
           meta={
@@ -109,7 +126,7 @@ export default function Dashboard({ data }: { data: MarketData }) {
         </ChartCard>
 
         <ChartCard
-          index="图 4"
+          index="图 5"
           title="杠杆率与换手率"
           subtitle="杠杆率＝融资余额/流通市值，换手率＝成交额/流通市值，都做了规模归一，便于跨时间比较"
           meta={
@@ -128,7 +145,7 @@ export default function Dashboard({ data }: { data: MarketData }) {
         </ChartCard>
 
         <ChartCard
-          index="图 5"
+          index="图 6"
           title="跨市场科技情绪（科创50 vs 韩国 KOSPI）"
           subtitle="韩国是 A 股半导体/算力的第一顺位跨市场读数；两条线的背离＝A 股科技相对强弱的独立信号"
           className="chart-card--wide"

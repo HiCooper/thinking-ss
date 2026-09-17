@@ -45,8 +45,27 @@ const KOREA_SYMBOLS = ['b_KOSPI', 'b_KOSDAQ']
  */
 const HK_SYMBOL = 'hkHSTECH'
 const HK_RT_SYMBOL = 'rt_hkHSTECH'
+/**
+ * COMEX 黄金 / 白银、NYMEX WTI 原油（外盘 `hf_` 前缀，字段序与 A50/NQ 完全一致）。
+ * 加这三个的目的：实时面板原来清一色「风险资产」（股指期货 + 港股科技），
+ * 缺一条**避险 / 大宗**腿 —— 黄金是避险与实际利率代理（直接对应黄金股板块），
+ * WTI 对应油气化工行业读数，白银与黄金高度相关（0.8+，信息量重叠，属顺带展示）。
+ */
+const GOLD_SYMBOL = 'hf_GC'
+const SILVER_SYMBOL = 'hf_SI'
+const WTI_SYMBOL = 'hf_CL'
 
-const SYMBOLS = [...INDEX_SYMBOLS, A50_SYMBOL, NQ_SYMBOL, ...KOREA_SYMBOLS, HK_SYMBOL, HK_RT_SYMBOL]
+const SYMBOLS = [
+  ...INDEX_SYMBOLS,
+  A50_SYMBOL,
+  NQ_SYMBOL,
+  ...KOREA_SYMBOLS,
+  HK_SYMBOL,
+  HK_RT_SYMBOL,
+  GOLD_SYMBOL,
+  SILVER_SYMBOL,
+  WTI_SYMBOL,
+]
 
 const SINA_HEADERS = {
   Referer: 'https://finance.sina.com.cn',
@@ -135,6 +154,10 @@ export interface SpotSpark {
   kospi: SparkSeries | null
   kosdaq: SparkSeries | null
   hstech: SparkSeries | null
+  gold: SparkSeries | null
+  silver: SparkSeries | null
+  wti: SparkSeries | null
+  qvix: SparkSeries | null
 }
 
 export interface SpotPayload {
@@ -147,6 +170,17 @@ export interface SpotPayload {
   korea: { kospi: SpotKoreaItem | null; kosdaq: SpotKoreaItem | null } | null
   /** 恒生科技指数：面板上补「港股科技」这条腿，且它比 A 股晚一小时收盘 */
   hstech: SpotHkItem | null
+  /** 大宗商品：COMEX 黄金 / 白银、NYMEX WTI（与 a50 同形，补避险 / 大宗这条腿） */
+  futures: {
+    gold: SpotA50 | null
+    silver: SpotA50 | null
+    wti: SpotA50 | null
+  }
+  /**
+   * QVIX：50ETF 期权隐含波动率指数（**中国波指**，optbbs 民间重建）。形状与 a50 一致，
+   * `time` 为当日最后有效读数的北京时间（A 股时段，收盘后停在收盘值）。
+   */
+  qvix: SpotA50 | null
   spark: SpotSpark
   errors: string[]
 }
@@ -452,6 +486,84 @@ interface MinPoints {
   base: number | null
 }
 
+/* ------------------------------ QVIX（中国波指） ------------------------------ */
+
+/**
+ * QVIX：50ETF 期权的隐含波动率指数（**国内版恐慌指数**，民间项目 optbbs 重建，
+ * akshare 的 QVIX 接口也只是包了壳）。为什么不用 CBOE VIX：已实测替换需求 —— VIX 是
+ * 全球恐慌读数，QVIX 直接反映 A 股期权市场对**国内资产**未来波动的定价，对 A 股持仓更贴身。
+ *
+ * 为什么选 50ETF：国内期权流动性最好的品种。⚠️ 同站的「中证300股指」序列已于 2026-05-29
+ * 停更（CSV 里全是 `#NAME?` 公式断链残骸），50ETF 线仍每日更新 —— 别换列，别信 akshare 文档。
+ *
+ * 端点：`http://1.optbbs.com/d/csv/d/vix50.csv`，纯文本 CSV：
+ *   头行 `Time,QVIX,Pre,max,min`；数据行 `9:30:00,15.80 ,15.96,…`（字段带尾随空格）
+ *   - [1] 当日分时读数（收盘后尾部是空占位行，要过滤）
+ *   - [2] **昨收**（只在首行有值）
+ */
+const QVIX_URL = 'http://1.optbbs.com/d/csv/d/vix50.csv'
+
+interface QvixResult {
+  quote: SpotA50 | null
+  spark: SparkSeries | null
+}
+
+function parseQvixCsv(text: string): QvixResult {
+  const pts: { t: string; v: number }[] = []
+  let preClose: number | null = null
+  let lastT: string | null = null
+  let lastV: number | null = null
+
+  for (const rawLine of text.split('\n')) {
+    const line = rawLine.replace(/^\ufeff/, '').trim()
+    if (line === '' || line.startsWith('Time')) continue
+    const cols = line.split(',').map((c) => c.trim())
+    const t = cols[0] ?? ''
+    const m = /^(\d{1,2}):(\d{2})(?::\d{2})?$/.exec(t)
+    if (!m) continue
+    const v = toNum(cols[1])
+    if (v === null || v <= 0) continue // 空占位行
+    const p = toNum(cols[2])
+    if (preClose === null && p !== null && p > 0) preClose = p // 昨收只在首行
+    const hhmm = `${m[1].padStart(2, '0')}:${m[2]}`
+    pts.push({ t: hhmm, v })
+    lastT = hhmm
+    lastV = v
+  }
+
+  if (lastV === null) return { quote: null, spark: null }
+  return {
+    quote: {
+      price: round(lastV, 2),
+      chg_pct: chgPct(lastV, preClose),
+      time: lastT,
+    },
+    spark: toSpark(pts, preClose),
+  }
+}
+
+async function fetchQvix(errors: string[]): Promise<QvixResult> {
+  let text: string
+  try {
+    const res = await fetch(QVIX_URL, { signal: AbortSignal.timeout(TIMEOUT_MS) })
+    if (!res.ok) {
+      errors.push(`QVIX 返回 HTTP ${res.status}`)
+      return { quote: null, spark: null }
+    }
+    text = await res.text()
+  } catch (err) {
+    errors.push(`QVIX 抓取失败：${err instanceof Error ? err.message : String(err)}`)
+    return { quote: null, spark: null }
+  }
+
+  try {
+    return parseQvixCsv(text)
+  } catch (err) {
+    errors.push(`QVIX 解析失败：${err instanceof Error ? err.message : String(err)}`)
+    return { quote: null, spark: null }
+  }
+}
+
 /**
  * 腾讯分时解析。`data[code].data.data` 是 `"HHMM 价 量 额"` 字符串数组；
  * 昨收在 `data[code].qt[code][4]`（同一份响应里，不用另发一次请求）。
@@ -512,15 +624,20 @@ async function buildSpot(): Promise<SpotPayload> {
   const { minutes, ts } = beijingNow()
   const errors: string[] = []
 
-  // 行情与五条分时并行抓，互不阻塞
-  const [quotes, sparkA50, sparkNq, sparkKospi, sparkKosdaq, hkPoints] = await Promise.all([
-    fetchQuotes(errors),
-    fetchFuturesSpark('CHA50CFD', 'A50', errors),
-    fetchFuturesSpark('NQ', 'NQ', errors),
-    fetchKoreaSpark('KOSPI', errors),
-    fetchKoreaSpark('KOSDAQ', errors),
-    fetchTencentMinPoints(HK_SYMBOL, '恒生科技', errors),
-  ])
+  // 行情与分时并行抓，互不阻塞
+  const [quotes, sparkA50, sparkNq, sparkKospi, sparkKosdaq, hkPoints, sparkGold, sparkSilver, sparkWti, qvix] =
+    await Promise.all([
+      fetchQuotes(errors),
+      fetchFuturesSpark('CHA50CFD', 'A50', errors),
+      fetchFuturesSpark('NQ', 'NQ', errors),
+      fetchKoreaSpark('KOSPI', errors),
+      fetchKoreaSpark('KOSDAQ', errors),
+      fetchTencentMinPoints(HK_SYMBOL, '恒生科技', errors),
+      fetchFuturesSpark('GC', 'COMEX黄金', errors),
+      fetchFuturesSpark('SI', 'COMEX白银', errors),
+      fetchFuturesSpark('CL', 'WTI原油', errors),
+      fetchQvix(errors),
+    ])
 
   const kospi = buildKorea(quotes, 'b_KOSPI')
   const kosdaq = buildKorea(quotes, 'b_KOSDAQ')
@@ -541,9 +658,123 @@ async function buildSpot(): Promise<SpotPayload> {
     // kosdaq 保留在 payload 里（前端暂不渲染），想恢复只改 LiveStrip 一行
     korea: kospi || kosdaq ? { kospi, kosdaq } : null,
     hstech: buildHk(quotes),
-    spark: { a50: sparkA50, nq: sparkNq, kospi: sparkKospi, kosdaq: sparkKosdaq, hstech: sparkHstech },
+    futures: {
+      gold: buildFuture(quotes, GOLD_SYMBOL),
+      silver: buildFuture(quotes, SILVER_SYMBOL),
+      wti: buildFuture(quotes, WTI_SYMBOL),
+    },
+    qvix: qvix.quote,
+    spark: {
+      a50: sparkA50,
+      nq: sparkNq,
+      kospi: sparkKospi,
+      kosdaq: sparkKosdaq,
+      hstech: sparkHstech,
+      gold: sparkGold,
+      silver: sparkSilver,
+      wti: sparkWti,
+      qvix: qvix.spark,
+    },
     errors,
   }
+}
+
+/* ------------------------------ 快讯（新浪 7×24） ------------------------------ */
+
+/**
+ * 新浪 7×24 快讯（与行情同生态，免费稳定）。为什么不用财联社电报：质量更好但反爬严格。
+ * 客户端 60s 轮询一次即可 —— 快讯不是价格，轮询太快没有意义还容易被封；
+ * 服务端再做一层 30s 内存缓存兜底（多个标签页共用，避免重复打上游）。
+ *
+ * 重要级判定：接口的 `tag` 是**分类**（市场/央行/国际/公司…）不是重要级，
+ * 所以用关键词规则自己判 —— 命中即视为重要（红点 + 置顶加粗的依据）。
+ */
+const SINA_NEWS_URL =
+  'https://zhibo.sina.com.cn/api/zhibo/feed?page=1&page_size=50&zhibo_id=152&tag_id=0&dire=f&dpc=1'
+const NEWS_CACHE_MS = 30_000
+const NEWS_MAX_ITEMS = 50
+
+/** 命中即视为「重要」的关键词：货币政策 / 监管 / 财政 / 贸易 / 指数规则类事件。 */
+const NEWS_IMPORTANT_RE =
+  /(央行|降准|降息|加息|加息|证监会|国务院|财政部|发改委|印花税|关税|美联储|议息|国务院常务|政治局)/
+
+export interface NewsItem {
+  id: string
+  /** HH:MM（同日）；跨日时带 MM-DD 前缀 */
+  time: string
+  text: string
+  /** 命中重要关键词 */
+  important: boolean
+  /** 新浪 7×24 详情页（无则空串） */
+  url: string
+  /** 分类名（市场/央行/国际/公司/其他…，取第一个） */
+  tag: string
+}
+
+export interface NewsPayload {
+  ts: string
+  items: NewsItem[]
+  errors: string[]
+}
+
+let newsCache: { at: number; payload: NewsPayload } | null = null
+
+function parseNewsTs(createTime: string, today: string): string {
+  // "2026-09-17 22:35:57" → 同日 "22:35"，跨日 "09-16 22:35"
+  const m = /^\d{4}-(\d{2}-\d{2}) (\d{2}:\d{2})/.exec(createTime.trim())
+  if (!m) return createTime.slice(11, 16) || createTime
+  return m[1] === today ? m[2] : `${m[1]} ${m[2]}`
+}
+
+async function fetchNews(now: Date): Promise<NewsPayload> {
+  const today = `${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+  const ts = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+  try {
+    const res = await fetch(SINA_NEWS_URL, {
+      headers: SINA_HEADERS,
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+    })
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    const json = (await res.json()) as {
+      result?: { data?: { feed?: { list?: unknown } } }
+    }
+    const list = Array.isArray(json.result?.data?.feed?.list)
+      ? (json.result!.data!.feed!.list as Record<string, unknown>[])
+      : []
+    const items: NewsItem[] = []
+    for (const it of list) {
+      const text = typeof it.rich_text === 'string' ? it.rich_text.trim() : ''
+      if (text === '') continue
+      const tags = Array.isArray(it.tag) ? (it.tag as { name?: unknown }[]) : []
+      const tag = typeof tags[0]?.name === 'string' ? tags[0].name : ''
+      items.push({
+        id: String(it.id ?? ''),
+        time: parseNewsTs(typeof it.create_time === 'string' ? it.create_time : '', today),
+        text,
+        important: NEWS_IMPORTANT_RE.test(text),
+        url: typeof it.docurl === 'string' ? it.docurl : '',
+        tag,
+      })
+      if (items.length >= NEWS_MAX_ITEMS) break
+    }
+    return { ts, items, errors: items.length === 0 ? ['快讯列表为空'] : [] }
+  } catch (err) {
+    return {
+      ts,
+      items: [],
+      errors: [`快讯抓取失败：${err instanceof Error ? err.message : String(err)}`],
+    }
+  }
+}
+
+/** 内存缓存：30s 内的重复请求（多标签页 / 手动连点）直接回缓存，不打上游。 */
+async function getNews(): Promise<NewsPayload> {
+  const now = new Date()
+  if (newsCache && now.getTime() - newsCache.at < NEWS_CACHE_MS) return newsCache.payload
+  const payload = await fetchNews(now)
+  if (payload.items.length > 0) newsCache = { at: now.getTime(), payload }
+  else if (newsCache) return newsCache.payload // 抓取失败时退回旧缓存，列表不闪空
+  return payload
 }
 
 /* ------------------------------ data.json 版本标记 ------------------------------ */
@@ -839,7 +1070,19 @@ function failurePayload(message: string): SpotPayload {
     nq: null,
     korea: null,
     hstech: null,
-    spark: { a50: null, nq: null, kospi: null, kosdaq: null, hstech: null },
+    futures: { gold: null, silver: null, wti: null },
+    qvix: null,
+    spark: {
+      a50: null,
+      nq: null,
+      kospi: null,
+      kosdaq: null,
+      hstech: null,
+      gold: null,
+      silver: null,
+      wti: null,
+      qvix: null,
+    },
     errors: [message],
   }
 }
@@ -879,6 +1122,24 @@ function createMiddleware(dataFiles: string[], holdingsFiles: string[]): Connect
             errors: [err instanceof Error ? err.message : String(err)],
           })
         })
+      return
+    }
+
+    // 新浪 7×24 快讯（服务端 30s 内存缓存 + 客户端 60s 轮询）
+    if (pathname === '/api/news') {
+      if (request.method && request.method !== 'GET' && request.method !== 'HEAD') {
+        sendJson(response, 405, { error: '仅支持 GET /api/news' })
+        return
+      }
+      void getNews()
+        .then((payload) => sendJson(response, 200, payload))
+        .catch((err: unknown) =>
+          sendJson(response, 200, {
+            ts: beijingNow().ts,
+            items: [],
+            errors: [err instanceof Error ? err.message : String(err)],
+          }),
+        )
       return
     }
 

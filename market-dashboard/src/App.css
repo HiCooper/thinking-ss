@@ -195,6 +195,41 @@
   min-width: 0;
 }
 
+/* 通栏结论卡（趋势状态）：独占一行，label / 结论 / 明细横向排布，
+   与下方四张竖排指标卡形成「先结论、后输入」的视觉层级 */
+.summary-card--wide {
+  grid-column: 1 / -1;
+  flex-direction: row;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 24px;
+  padding: 14px 18px;
+}
+
+.summary-card--wide .summary-card__label {
+  flex: 0 0 auto;
+}
+
+.summary-card--wide .summary-card__value {
+  flex: 0 0 auto;
+}
+
+.summary-card--wide .summary-card__number {
+  font-size: 30px;
+}
+
+.summary-card--wide .summary-card__details {
+  flex: 1 1 auto;
+  flex-direction: row;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 4px 26px;
+}
+
+.summary-card--wide .summary-card__detail {
+  flex: 0 0 auto;
+}
+
 .summary-card__label {
   display: flex;
   align-items: center;
@@ -404,8 +439,8 @@
 
 .live-grid {
   display: grid;
-  /* 四张跨市场报价卡（成交额已并入上方摘要卡，不再重复展示）→ 四等分；
-     ≤1080px 落成 2×2，≤680px 单列（见下方媒体查询） */
+  /* 八张跨市场报价卡（风险资产 4 + 大宗/波动率 4）→ 四等分自然落成两行；
+     ≤1080px 落成 2 列四行，≤680px 单列（见下方媒体查询） */
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
 }
@@ -1265,4 +1300,180 @@ code {
 .trend-empty__facts dd {
   font-size: 13px;
   font-weight: 600;
+}
+
+/* ============================ 快讯坞（大盘趋势页右侧） ============================ */
+
+/* 收起态：36px 窄竖条，右侧垂直居中。fixed 不占布局，展开时才浮在内容上方。 */
+.news-dock__tab {
+  position: fixed;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 60; /* 低于底部指数条无冲突；高于普通内容 */
+  writing-mode: vertical-rl;
+  letter-spacing: 6px;
+  padding: 16px 8px;
+  border: 1px solid var(--border);
+  border-right: none;
+  border-radius: var(--radius) 0 0 var(--radius);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  font-size: 12px;
+  box-shadow: var(--shadow);
+  cursor: pointer;
+  position: fixed;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.news-dock__tab:hover {
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+
+/* 未读红点：只数「重要」条目 */
+.news-dock__badge {
+  writing-mode: horizontal-tb;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: var(--up);
+  color: #fff;
+  font-size: 11px;
+  line-height: 16px;
+  text-align: center;
+  letter-spacing: 0;
+}
+
+/* 展开态：340px 面板，右侧垂直居中，最大高度约视口 70% */
+.news-dock__panel {
+  position: fixed;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 60;
+  width: 340px;
+  max-height: 70vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 4px 24px rgba(19, 34, 56, 0.14);
+}
+
+.news-dock__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.news-dock__title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.news-dock__head-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.news-dock__ts {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.news-dock__notice {
+  padding: 16px 12px;
+  font-size: 12px;
+  margin: 0;
+}
+
+.news-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+}
+
+.news-item {
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.news-item:last-child {
+  border-bottom: none;
+}
+
+/* 重要条目：左侧红边 + 标题行强调 */
+.news-item--important {
+  border-left: 3px solid var(--up);
+  background: color-mix(in srgb, var(--up) 4%, transparent);
+}
+
+.news-item__meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 3px;
+}
+
+.news-item__time {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.news-item__tag {
+  font-size: 11px;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0 4px;
+}
+
+.news-item__flag {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--up);
+}
+
+.news-item__link {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.news-item__link:hover {
+  text-decoration: underline;
+}
+
+.news-item__text {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.news-item__hl {
+  color: var(--up);
+  font-weight: 600;
+}
+
+/* ≤1080px 窄屏：整体隐藏（移动端没有「旁边扫一眼」的场景） */
+@media (max-width: 1080px) {
+  .news-dock {
+    display: none;
+  }
 }

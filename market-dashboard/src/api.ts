@@ -46,6 +46,11 @@ const NUMERIC_KEYS: NumericKey[] = [
   'turnover_ratio',
   'kospi',
   'star50',
+  'hs300',
+  'breadth_high20',
+  'breadth_low20',
+  'adv_count',
+  'dec_count',
 ]
 
 /** 任意非有限数值（含 null / undefined / NaN / ""）统一收敛为 null。 */
@@ -228,6 +233,7 @@ function normalizeSpot(raw: unknown): SpotData {
   const koreaRaw = objOf(o.korea)
   const kospi = koreaRaw ? normalizedKorea(koreaRaw.kospi) : null
   const kosdaq = koreaRaw ? normalizedKorea(koreaRaw.kosdaq) : null
+  const futuresRaw = objOf(o.futures)
   const sparkRaw = objOf(o.spark)
   return {
     ts: strOf(o, 'ts') ?? '—',
@@ -237,12 +243,22 @@ function normalizeSpot(raw: unknown): SpotData {
     nq: normalizedFuture(o.nq),
     korea: kospi || kosdaq ? { kospi, kosdaq } : null,
     hstech: normalizedHk(o.hstech),
+    futures: {
+      gold: futuresRaw ? normalizedFuture(futuresRaw.gold) : null,
+      silver: futuresRaw ? normalizedFuture(futuresRaw.silver) : null,
+      wti: futuresRaw ? normalizedFuture(futuresRaw.wti) : null,
+    },
+    qvix: normalizedFuture(o.qvix),
     spark: {
       a50: sparkRaw ? normalizedSpark(sparkRaw.a50) : null,
       nq: sparkRaw ? normalizedSpark(sparkRaw.nq) : null,
       kospi: sparkRaw ? normalizedSpark(sparkRaw.kospi) : null,
       kosdaq: sparkRaw ? normalizedSpark(sparkRaw.kosdaq) : null,
       hstech: sparkRaw ? normalizedSpark(sparkRaw.hstech) : null,
+      gold: sparkRaw ? normalizedSpark(sparkRaw.gold) : null,
+      silver: sparkRaw ? normalizedSpark(sparkRaw.silver) : null,
+      wti: sparkRaw ? normalizedSpark(sparkRaw.wti) : null,
+      qvix: sparkRaw ? normalizedSpark(sparkRaw.qvix) : null,
     },
     errors: Array.isArray(o.errors) ? o.errors.filter((e): e is string => typeof e === 'string') : [],
   }

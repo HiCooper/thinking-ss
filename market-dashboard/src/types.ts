@@ -31,6 +31,16 @@ export interface MarketRow {
   kospi: number | null
   /** 科创50 收盘点位 */
   star50: number | null
+  /** 沪深300 收盘点位（趋势判定用） */
+  hs300: number | null
+  /** 全A 创20日新高家数（市场宽度，乐咕乐股口径） */
+  breadth_high20: number | null
+  /** 全A 创20日新低家数 */
+  breadth_low20: number | null
+  /** 上涨家数（当日快照，收盘后逐日累积） */
+  adv_count: number | null
+  /** 下跌家数（同上） */
+  dec_count: number | null
 }
 
 export interface MarketData {
@@ -54,6 +64,11 @@ export type NumericKey =
   | 'turnover_ratio'
   | 'kospi'
   | 'star50'
+  | 'hs300'
+  | 'breadth_high20'
+  | 'breadth_low20'
+  | 'adv_count'
+  | 'dec_count'
 
 /* ------------------------------ /api/spot 实时接口契约 ------------------------------ */
 
@@ -125,6 +140,11 @@ export interface SpotSpark {
   kosdaq: SparkSeries | null
   /** 恒生科技指数分时（走腾讯，新浪没有港股分时端点） */
   hstech: SparkSeries | null
+  gold: SparkSeries | null
+  silver: SparkSeries | null
+  wti: SparkSeries | null
+  /** QVIX 分时（50ETF 期权隐波，optbbs 民间重建的中国波指，横轴为北京时间） */
+  qvix: SparkSeries | null
 }
 
 /** GET /api/spot 的返回结构。任一子项抓取失败时该项为 null，原因写入 errors。 */
@@ -138,6 +158,14 @@ export interface SpotData {
   korea: { kospi: SpotKoreaItem | null; kosdaq: SpotKoreaItem | null } | null
   /** 恒生科技指数：补「港股科技」这条腿 —— 港股 16:00 收盘，比 A 股晚一小时 */
   hstech: SpotHkItem | null
+  /** 大宗商品（COMEX 黄金/白银、NYMEX WTI）：补避险 / 大宗这条腿，与 a50 同形 */
+  futures: {
+    gold: SpotA50 | null
+    silver: SpotA50 | null
+    wti: SpotA50 | null
+  }
+  /** QVIX（中国波指）：50ETF 期权隐含波动率指数，A 股时段更新，收盘后停在收盘值 */
+  qvix: SpotA50 | null
   spark: SpotSpark
   errors: string[]
 }

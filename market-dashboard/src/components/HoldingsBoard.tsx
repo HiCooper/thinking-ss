@@ -5,7 +5,6 @@ import HoldingsStructureChart from './HoldingsStructureChart'
 import HoldingsPnlChart from './HoldingsPnlChart'
 import HoldingsTable from './HoldingsTable'
 import HoldingsPnlTrendChart from './HoldingsPnlTrendChart'
-import GroupRsChart from './GroupRsChart'
 import {
   HoldingsMissingError,
   breakevenOf,
@@ -18,8 +17,6 @@ import {
 import type { HoldingQuotesFile, HoldingsFile } from '../holdings'
 import { fetchHoldingsHistory } from '../holdingsHistory'
 import type { HoldingsHistory } from '../holdingsHistory'
-import { fetchGroupRs } from '../groupRs'
-import type { GroupRsFile } from '../groupRs'
 import { fmtNum, fmtPct, fmtSignedYuan, fmtYuan, trendClass } from '../format'
 
 /**
@@ -91,9 +88,6 @@ export default function HoldingsBoard() {
   const [refreshKey, setRefreshKey] = useState(0)
   /** 账户收益走势记录。null = 还没有任何记录（正常状态，非错误） */
   const [history, setHistory] = useState<HoldingsHistory | null>(null)
-  /** 分组相对强弱。null = 还没导出（正常状态）；它是日频文件，只在挂载与手动刷新时取一次 */
-  const [groupRs, setGroupRs] = useState<GroupRsFile | null>(null)
-  const [groupRsLoaded, setGroupRsLoaded] = useState(false)
 
   // 静态快照：份额与成本
   useEffect(() => {
@@ -185,24 +179,6 @@ export default function HoldingsBoard() {
       controller.abort()
     }
   }, [sessionState, refreshKey])
-
-  // 分组相对强弱是**日频**文件，由 `npm run groups:export` 生成（服务器启动时也会后台跑一次）。
-  // 它不跟着报价轮询，也不做定时复查 —— 挂载时取一次，「立即刷新」时再取一次即可。
-  useEffect(() => {
-    const controller = new AbortController()
-    fetchGroupRs(controller.signal)
-      .then((g) => {
-        if (!controller.signal.aborted) {
-          setGroupRs(g)
-          setGroupRsLoaded(true)
-        }
-      })
-      .catch(() => {
-        if (!controller.signal.aborted) setGroupRsLoaded(true)
-      })
-    return () => controller.abort()
-  }, [refreshKey])
-
 
   const file = state.status === 'ready' ? state.file : null
 
@@ -408,23 +384,6 @@ cd market-dashboard && npm run holdings:export`}</pre>
 
         <ChartCard
           index="图 2"
-          title="分组相对强弱（相对沪深300）"
-          subtitle="每组相对基准的累计超额收益，0 上方＝跑赢。组间垂直距离＝同样一笔钱放不同组的差别，也就是「该站在哪条腿上」"
-          className="chart-card--wide"
-          meta={
-            <>
-              <span className="tag">等权归一</span>
-              <span className="tag tag--ghost">
-                {groupRs ? `${groupRs.groups.length} 组 · 至 ${groupRs.as_of ?? '—'}` : '尚无数据'}
-              </span>
-            </>
-          }
-        >
-          <GroupRsChart data={groupRs} loaded={groupRsLoaded} />
-        </ChartCard>
-
-        <ChartCard
-          index="图 3"
           title="分组结构：市值占比 vs 盈亏贡献"
           subtitle="两根条越不成比例，说明这组对总盈亏的影响远超它的仓位占比——亏损组向左、盈利组向右，0 处为参考线"
           className="chart-card--wide"
@@ -439,7 +398,7 @@ cd market-dashboard && npm run holdings:export`}</pre>
         </ChartCard>
 
         <ChartCard
-          index="图 4"
+          index="图 3"
           title="个股盈亏排行"
           subtitle="按盈亏金额排序（最惨在最上，盈利的在下方），颜色深浅表示盈亏幅度；金额与幅度不一致时以金额看痛点"
           className="chart-card--wide"
