@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
-import { latestWith, marginTotalOf, pctChange, bpDiff, prevNonNull, valueLookback, valueOf } from '../calc'
+import { column, latestWith, marginTotalOf, pctChange, bpDiff, prevNonNull, valueLookback, valueOf } from '../calc'
 import { fmtBp, fmtDateCN, fmtInt, fmtNum, fmtPct, fmtSigned, trendClass, isNum } from '../format'
+import { PERCENTILE_WINDOW, percentileInfo } from '../stats'
 import type { MarketRow } from '../types'
 
 interface SummaryCardsProps {
@@ -13,6 +14,8 @@ interface Metric {
   value: string
   unit: string
   hint?: string
+  /** 近 N 个交易日的百分位排名（0~100）；样本不足时 null */
+  pctRank?: number | null
   /** 主数值的涨跌方向（红涨绿跌） */
   trend?: number | null
   details: { label: string; text: string; trend?: number | null; title?: string }[]
@@ -89,6 +92,7 @@ export default function SummaryCards({ rows }: SummaryCardsProps) {
         value: fmtInt(turnover.cur?.value),
         unit: '亿元',
         trend: tChangeAmt,
+        pctRank: percentileInfo(column(rows, 'turnover_total'), turnover.cur?.value ?? null)?.rank ?? null,
         details: [
           { label: '日变动', text: tChangeText, trend: tChangeAmt, title: '与上一交易日全天成交额之差（交易所官方口径）' },
           {
@@ -107,6 +111,7 @@ export default function SummaryCards({ rows }: SummaryCardsProps) {
         value: fmtInt(mCur),
         unit: '亿元',
         trend: pctChange(mCur, mPrev),
+        pctRank: percentileInfo(column(rows, 'margin_total'), mCur)?.rank ?? null,
         details: [
           { label: '日变动', text: fmtPct(pctChange(mCur, mPrev)), trend: pctChange(mCur, mPrev) },
           {
@@ -124,6 +129,7 @@ export default function SummaryCards({ rows }: SummaryCardsProps) {
         unit: '%',
         trend: usDiffBp,
         hint: us ? us.row.date : undefined,
+        pctRank: percentileInfo(column(rows, 'us10y'), us?.value ?? null)?.rank ?? null,
         details: [
           { label: '日变动', text: fmtBp(usDiffBp), trend: usDiffBp },
           { label: '中美利差', text: isNum(spread) ? `${fmtNum(spread, 0)}bp` : '—', trend: spread },
@@ -139,7 +145,17 @@ export default function SummaryCards({ rows }: SummaryCardsProps) {
         <article className="card summary-card" key={m.key}>
           <div className="summary-card__label">
             {m.label}
-            {m.hint ? <span className="summary-card__hint">{m.hint}</span> : null}
+            <span className="summary-card__label-right">
+              {typeof m.pctRank === 'number' ? (
+                <span
+                  className="summary-card__pct"
+                  title={`近 ${PERCENTILE_WINDOW} 个交易日的百分位排名：历史上有 ${m.pctRank.toFixed(0)}% 的交易日读数不高于它`}
+                >
+                  {m.pctRank.toFixed(0)}% 分位
+                </span>
+              ) : null}
+              {m.hint ? <span className="summary-card__hint">{m.hint}</span> : null}
+            </span>
           </div>
           <div className={`summary-card__value num ${trendClass(m.trend)}`}>
             <span className="summary-card__number">{m.value}</span>

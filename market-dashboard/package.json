@@ -14,7 +14,8 @@
     "data:refresh": "bash scripts/refresh.sh",
     "data:validate": "python3 scripts/validate_data.py",
     "holdings:export": "python3 scripts/export_holdings.py",
-    "holdings:snapshot": "python3 scripts/record_holdings_snapshot.py"
+    "holdings:snapshot": "python3 scripts/record_holdings_snapshot.py",
+    "groups:export": "python3 scripts/export_group_rs.py"
   },
   "dependencies": {
     "echarts": "^6.1.0",

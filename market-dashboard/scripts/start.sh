@@ -51,8 +51,16 @@ if command -v python3 >/dev/null 2>&1; then
     python3 scripts/record_holdings_snapshot.py --if-due 2>&1 \
       | sed 's/^/  [收益记录] /'
   ) &
+
+  # 5) 分组相对强弱（groups.json）。只在持仓文件存在时跑 —— 它由 holdings.json 派生，
+  #    没有持仓（刚 clone）时跳过，别让启动报一堆错。要抓 23 条日K（约 3–6s），放后台。
+  if [ -f public/holdings.json ]; then
+    (
+      python3 scripts/export_group_rs.py 2>&1 | sed 's/^/  [分组强弱] /'
+    ) &
+  fi
 fi
 
-# 5) 起服务（--port 覆盖 vite.config 的默认端口）
+# 6) 起服务（--port 覆盖 vite.config 的默认端口）
 echo "▶ 打开 http://127.0.0.1:${PORT}"
 exec npm run dev -- --port "${PORT}"

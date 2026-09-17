@@ -20,6 +20,11 @@ export const C = {
   pnlTrendAmount: '#1f3a5f',
   /** 持仓看板 图 1：日收益率（右轴，虚线 + 空心圈） */
   pnlTrendPct: '#e0a33e',
+  /**
+   * 持仓看板 图 2「分组相对强弱」的分类色板。
+   * 刻意**避开红/绿**：那两色在本站是「涨/跌」的语义，拿来区分「哪一组」会误读成方向。
+   */
+  groupPalette: ['#8e5bb5', '#4a90d9', '#d97706', '#1f7a5c', '#b0559a'],
   axisLine: '#dfe3e9',
   splitLine: '#eef1f5',
   axisLabel: '#7a8699',
@@ -245,5 +250,36 @@ export function zeroMarkLine(axis: 'x' | 'y' = 'x'): Record<string, unknown> {
     lineStyle: { color: '#c3cbd8', width: 1, type: 'solid' },
     label: { show: false },
     data: [axis === 'x' ? { xAxis: 0 } : { yAxis: 0 }],
+  }
+}
+
+/**
+ * 分位带：P20~P80 的浅色横带 + P50 中位虚线。挂在**左轴**（`yAxisIndex: 0`）那条序列上。
+ *
+ * 用 `markArea`/`markLine` 而不是再加两条数据线 —— 后者会进 tooltip、图例与 dataZoom 图例，
+ * 把「参考背景」伪装成「第三个指标」。这里的带是**背景刻度**，不该被读成一条序列。
+ *
+ * ⚠️ 两个 mark 都影响坐标轴量程前请确认：P20/P80 取自同一条序列的历史值，
+ * 所以它们必然落在数据自身范围内，不会把 y 轴撑开。
+ */
+export function percentileBand(
+  p: { p20: number; p50: number; p80: number },
+  bandColor = 'rgba(31, 58, 95, 0.06)',
+): Record<string, unknown> {
+  return {
+    markArea: {
+      silent: true,
+      itemStyle: { color: bandColor },
+      label: { show: false },
+      data: [[{ yAxis: p.p20 }, { yAxis: p.p80 }]],
+    },
+    markLine: {
+      silent: true,
+      symbol: 'none',
+      animation: false,
+      lineStyle: { color: '#b9c3d1', width: 1, type: 'dashed' },
+      label: { show: false },
+      data: [{ yAxis: p.p50 }],
+    },
   }
 }

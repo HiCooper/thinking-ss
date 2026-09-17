@@ -205,6 +205,26 @@
   letter-spacing: 0.3px;
 }
 
+.summary-card__label-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+/* 近 N 个交易日的分位角标：给裸数字一个「在历史什么位置」的读数 */
+.summary-card__pct {
+  padding: 1px 6px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: var(--bg-subtle);
+  font-size: 11px;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
 .summary-card__hint {
   font-size: 11px;
   color: var(--text-muted);

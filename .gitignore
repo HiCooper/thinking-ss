@@ -3,7 +3,10 @@
 #
 #   holdings.md                            ← 真实持仓（份额 / 成本 / 市值）
 #   market-dashboard/public/holdings.json  ← 上者生成的机器可读快照
+#   market-dashboard/public/holdings-history.json ← 账户每日收益记录
 #   calibration-log.md                     ← 校准日志（含持仓成本价与组合金额）
+#   market-dashboard/public/groups.json    ← 分组相对强弱（由 holdings.json 的分组派生，
+#                                             组构成等于间接暴露持仓结构）
 #
 # 仓库里对应的模板 / 替代物：
 #   holdings.example.md                    ← 持仓文件模板（全是编造数据）
@@ -31,3 +34,4 @@
 /calibration-log.md
 market-dashboard/public/holdings.json
 market-dashboard/public/holdings-history.json
+market-dashboard/public/groups.json

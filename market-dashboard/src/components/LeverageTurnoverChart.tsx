@@ -12,6 +12,7 @@ import {
   gridWithZoom,
   legendBase,
   numOf,
+  percentileBand,
   tooltipBase,
   ttDivider,
   ttRow,
@@ -19,6 +20,7 @@ import {
   valueAxis,
   TT_EMPTY,
 } from '../chartTheme'
+import { PERCENTILE_WINDOW, percentileOfLatest } from '../stats'
 import type { MarketRow } from '../types'
 
 const NAME_RZ = '杠杆率（融资余额/流通市值）'
@@ -29,6 +31,16 @@ const NAME_TO = '换手率（成交额/流通市值）'
  * 两个指标都做了「除以流通市值」的规模归一，量纲一致（%），因此共用同一条 y 轴。
  */
 export default function LeverageTurnoverChart({ rows }: { rows: MarketRow[] }) {
+  // 分位带只挂**换手率**：两条序列共用一根 y 轴，叠两条带会互相盖住、谁也读不出来。
+  // 杠杆率的分位改用图下文字给排名。放在 option 之外算，因为说明文字也要用。
+  const pcts = useMemo(
+    () => ({
+      rz: percentileOfLatest(column(rows, 'margin_rz_ratio')),
+      to: percentileOfLatest(column(rows, 'turnover_ratio')),
+    }),
+    [rows],
+  )
+
   const option = useMemo<EChartsOption>(() => {
     const dates = rows.map((r) => r.date)
     const rz = column(rows, 'margin_rz_ratio')
@@ -100,6 +112,7 @@ export default function LeverageTurnoverChart({ rows }: { rows: MarketRow[] }) {
           symbol: 'none',
           lineStyle: { width: 2, color: C.turnoverRatio },
           itemStyle: { color: C.turnoverRatio },
+          ...(pcts.to ? percentileBand(pcts.to) : {}),
           z: 3,
           connectNulls: false,
         },
@@ -110,14 +123,14 @@ export default function LeverageTurnoverChart({ rows }: { rows: MarketRow[] }) {
           ? []
           : graphicNotice(missing.join('\n'), missing.length === 2 ? 'center' : 'topRight'),
     } as EChartsOption
-  }, [rows])
+  }, [rows, pcts])
 
   const latest = useMemo(() => {
     const rz = latestWith(rows, 'margin_rz_ratio')
     const to = latestWith(rows, 'turnover_ratio')
     const cap = latestWith(rows, 'float_mktcap')
     return { rz, to, cap }
-  }, [rows])
+  }, [rows, pcts])
 
   return (
     <>
@@ -126,9 +139,23 @@ export default function LeverageTurnoverChart({ rows }: { rows: MarketRow[] }) {
           最新：杠杆率 {fmtNum(latest.rz?.value, 2)}%　·　换手率 {fmtNum(latest.to?.value, 2)}%　·　流通市值{' '}
           {fmtInt(latest.cap?.value)} 亿元
         </span>
-        <span className="muted">杠杆率高＝交易拥挤／加杠杆，杠杆率回落＝去杠杆；null 不连线</span>
+        <span className="muted">
+          杠杆率高＝交易拥挤／加杠杆，杠杆率回落＝去杠杆；null 不连线
+          {pcts.to ? (
+            <>
+              。灰色带＝<b>换手率</b>近 {PERCENTILE_WINDOW} 个交易日 P20~P80（{fmtNum(pcts.to.p20, 2)}% ~{' '}
+              {fmtNum(pcts.to.p80, 2)}%）、虚线为中位 {fmtNum(pcts.to.p50, 2)}%；最新处{' '}
+              换手率 <b>{pcts.to.rank.toFixed(0)}% 分位</b>
+              {pcts.rz ? (
+                <>
+                  、杠杆率 <b>{pcts.rz.rank.toFixed(0)}% 分位</b>
+                </>
+              ) : null}
+            </>
+          ) : null}
+        </span>
       </div>
-      <EChart option={option} height={340} ariaLabel="杠杆率与换手率走势图（同一 y 轴，%）" />
+      <EChart option={option} height={340} ariaLabel="杠杆率与换手率走势图（同一 y 轴，%，含换手率分位带）" />
     </>
   )
 }

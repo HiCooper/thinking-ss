@@ -5,6 +5,7 @@ import HoldingsStructureChart from './HoldingsStructureChart'
 import HoldingsPnlChart from './HoldingsPnlChart'
 import HoldingsTable from './HoldingsTable'
 import HoldingsPnlTrendChart from './HoldingsPnlTrendChart'
+import GroupRsChart from './GroupRsChart'
 import {
   HoldingsMissingError,
   breakevenOf,
@@ -17,6 +18,8 @@ import {
 import type { HoldingQuotesFile, HoldingsFile } from '../holdings'
 import { fetchHoldingsHistory } from '../holdingsHistory'
 import type { HoldingsHistory } from '../holdingsHistory'
+import { fetchGroupRs } from '../groupRs'
+import type { GroupRsFile } from '../groupRs'
 import { fmtNum, fmtPct, fmtSignedYuan, fmtYuan, trendClass } from '../format'
 
 /**
@@ -35,18 +38,35 @@ const QUOTES_POLL_MS = 5_000
 const HISTORY_POLL_MS = 60_000
 
 /**
- * 收盘后的轮询间隔。收盘价不再变动，5s 纯属空转，降到 60s。
+ * 收盘后**彻底停止轮询**，直接睡到次日盘前（09:15 集合竞价开始）再唤醒。
+ *
+ * 收盘价不会再变，继续取数是纯空转。但**不能就此永久停掉** —— 页面常驻一整夜的话，
+ * 次日开盘会一直停在昨天的收盘价上。所以「不刷新」= 睡到下一个 09:15，而不是关掉。
+ * 盘中想手动拉一次，用板块标题右侧的「立即刷新」。
+ *
  * 只认 `session.state === 'closed'`（即 15:00 之后）——盘前与午间休市仍按 5s，
  * 因为集合竞价（9:15–9:25）与午间挂单都会让价格跳。
  *
  * ⚠️ 已知缺口：`plugin/localApi.ts` 的 `sessionOf()` 只看时分、不看星期，
- * 所以**周末** 9:30–15:00 会被判成 'open'，仍按 5s 轮询。见 README 的说明。
+ * 所以**周末** 09:15–15:00 仍会被唤醒并按 5s 轮询。见 README 的说明。
  */
-const QUOTES_POLL_CLOSED_MS = 60_000
+const RESUME_HOUR = 9
+const RESUME_MINUTE = 15
+/** 兜底：万一算不出唤醒点（时钟异常），最多睡 1 小时再确认一次 */
+const RESUME_FALLBACK_MS = 60 * 60 * 1000
 
-/** 下一拍该等多久，由**上一拍响应里**的交易时段决定。 */
+/** 到下一个「盘前」（09:15）还有多少毫秒；今天已过 09:15 就顺延到明天。 */
+function msUntilNextSession(now = new Date()): number {
+  const next = new Date(now)
+  next.setHours(RESUME_HOUR, RESUME_MINUTE, 0, 0)
+  if (next.getTime() <= now.getTime()) next.setDate(next.getDate() + 1)
+  const ms = next.getTime() - now.getTime()
+  return Number.isFinite(ms) && ms > 0 ? ms : RESUME_FALLBACK_MS
+}
+
+/** 下一拍该等多久，由**上一拍响应里**的交易时段决定：收盘 → 睡到次日盘前，不再取数。 */
 function nextPollDelay(sessionState: string | null): number {
-  return sessionState === 'closed' ? QUOTES_POLL_CLOSED_MS : QUOTES_POLL_MS
+  return sessionState === 'closed' ? msUntilNextSession() : QUOTES_POLL_MS
 }
 
 type ViewState =
@@ -67,8 +87,13 @@ export default function HoldingsBoard() {
   const [quotes, setQuotes] = useState<HoldingQuotesFile | null>(null)
   const [quotesLoaded, setQuotesLoaded] = useState(false)
   const [reloadKey, setReloadKey] = useState(0)
+  /** 「立即刷新」用：只重取报价与收益记录，**不**让整页回到 loading 态（那是 reloadKey 的活） */
+  const [refreshKey, setRefreshKey] = useState(0)
   /** 账户收益走势记录。null = 还没有任何记录（正常状态，非错误） */
   const [history, setHistory] = useState<HoldingsHistory | null>(null)
+  /** 分组相对强弱。null = 还没导出（正常状态）；它是日频文件，只在挂载与手动刷新时取一次 */
+  const [groupRs, setGroupRs] = useState<GroupRsFile | null>(null)
+  const [groupRsLoaded, setGroupRsLoaded] = useState(false)
 
   // 静态快照：份额与成本
   useEffect(() => {
@@ -92,8 +117,10 @@ export default function HoldingsBoard() {
   }, [reloadKey])
 
   // 实时报价：轮询；接口不可用（静态部署）时静默保持 null
-  /** 最近一次响应里的交易时段；决定下一拍的间隔 */
+  /** 最近一次响应里的交易时段。**ref 给轮询链用**（闭包里必须拿到最新值），
+   *  **state 给收益记录那个 effect 用**（时段变化时要重新决定还轮不轮）。 */
   const sessionStateRef = useRef<string | null>(null)
+  const [sessionState, setSessionState] = useState<string | null>(null)
 
   const loadQuotes = useCallback(async (signal: AbortSignal) => {
     const data = await fetchHoldingQuotes(signal)
@@ -101,6 +128,7 @@ export default function HoldingsBoard() {
     sessionStateRef.current = data?.session.state ?? null
     setQuotes(data)
     setQuotesLoaded(true)
+    setSessionState(data?.session.state ?? null)
   }, [])
 
   useEffect(() => {
@@ -109,7 +137,7 @@ export default function HoldingsBoard() {
     let timer: number | null = null
 
     // 用 setTimeout 链而不是 setInterval：交易时段要等响应回来才知道，
-    // 固定间隔没法中途从 5s 切到 60s。每拍结束再按最新时段决定下一次等多久。
+    // 固定间隔没法中途从 5s 切到「睡到次日盘前」。每拍结束再按最新时段决定下一次等多久。
     //
     // 链式调度天然**串行**——下一拍只在本拍 await 结束后才安排，所以不需要 in-flight 守卫。
     // （早先加过一道 ref 守卫，反而有害：React 18 StrictMode 会挂载两次，第一次的请求被
@@ -131,10 +159,13 @@ export default function HoldingsBoard() {
       if (timer !== null) window.clearTimeout(timer)
       controller.abort()
     }
-  }, [loadQuotes])
+  }, [loadQuotes, refreshKey])
 
-  // 日收益记录是**日频**文件，不需要跟着 5s 的报价轮询；但用 60s 的慢轮询：
+  // 日收益记录是**日频**文件，不需要跟着 5s 的报价轮询；用 60s 的慢轮询：
   // 启动时 `--if-due` 自动补记的那一笔会被自动加载，不必手动刷新页面。
+  //
+  // 收盘后**连它一起停**：记录是日频的，整晚复查也等不到新数据，纯空转。
+  // 依赖 sessionState —— 时段变化（含切到 closed）时重建一次，顺便立刻复查一次。
   useEffect(() => {
     const controller = new AbortController()
     const load = () => {
@@ -147,12 +178,31 @@ export default function HoldingsBoard() {
         })
     }
     load()
+    if (sessionState === 'closed') return () => controller.abort()
     const id = window.setInterval(load, HISTORY_POLL_MS)
     return () => {
       window.clearInterval(id)
       controller.abort()
     }
-  }, [])
+  }, [sessionState, refreshKey])
+
+  // 分组相对强弱是**日频**文件，由 `npm run groups:export` 生成（服务器启动时也会后台跑一次）。
+  // 它不跟着报价轮询，也不做定时复查 —— 挂载时取一次，「立即刷新」时再取一次即可。
+  useEffect(() => {
+    const controller = new AbortController()
+    fetchGroupRs(controller.signal)
+      .then((g) => {
+        if (!controller.signal.aborted) {
+          setGroupRs(g)
+          setGroupRsLoaded(true)
+        }
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setGroupRsLoaded(true)
+      })
+    return () => controller.abort()
+  }, [refreshKey])
+
 
   const file = state.status === 'ready' ? state.file : null
 
@@ -206,8 +256,9 @@ cd market-dashboard && npm run holdings:export`}</pre>
     )
   }
 
-  // 圆点「亮」= 至少有实时报价；盘前按昨收计价时**不亮**（避免看起来像在实时跳动）
-  const isLive = quotes !== null && totals.liveCount > 0
+  // 圆点「亮」= 此刻真的在取实时价。盘前按昨收计价时**不亮**（避免看起来像在实时跳动），
+  // 收盘后也不亮 —— 已经停止轮询了，再亮着红点就是在骗人。
+  const isLive = quotes !== null && totals.liveCount > 0 && quotes.session.state !== 'closed'
   const allLive = totals.liveCount === totals.count
   /**
    * ⚠️ 「接口拿不到」和「接口拿到了但还没有价」是两件事，别混。
@@ -222,7 +273,7 @@ cd market-dashboard && npm run holdings:export`}</pre>
   /** 此刻是否在用昨收计价（盘前 / 停牌）：此时今日盈亏按定义为 0 */
   const pricedAtPrevClose = quotes !== null && totals.prevCloseCount > 0
   // 现价刷新口径的说明。间隔直接由常数换算，避免改了间隔忘了改文案。
-  // 收盘后价格不再变动，退避到 QUOTES_POLL_CLOSED_MS，这里如实写明。
+  // 收盘后不再轮询（睡到次日 09:15），这里如实写明。
   const closed = quotes?.session.state === 'closed'
 
   /**
@@ -240,13 +291,14 @@ cd market-dashboard && npm run holdings:export`}</pre>
   })()
   const recordDue =
     closed && latestQuoteDate !== null && (lastRecordDate === null || lastRecordDate < latestQuoteDate)
+  // 整句都写全，不再由外层统一加「现价」前缀 —— 会拼出「现价已收盘…」这种病句
   const liveNote = interfaceDown
-    ? '因无实时接口而降级为快照价'
+    ? '现价因无实时接口而降级为快照价'
     : noQuoteYet
-      ? `接口已连通，但此刻还没有实时价（${quotes?.session.label ?? '非交易时段'}），按昨收价计`
+      ? `行情接口已连通，但${quotes?.session.label ?? '非交易时段'}还没有实时价，现价按昨收计`
       : closed
-        ? `已收盘，每 ${QUOTES_POLL_CLOSED_MS / 1000} 秒刷新一次（收盘价不再变动）`
-        : `每 ${QUOTES_POLL_MS / 1000} 秒从新浪实时刷新`
+        ? '已收盘 · 收盘价不再变动，已停止自动刷新（次日 09:15 自动恢复）'
+        : `现价每 ${QUOTES_POLL_MS / 1000} 秒从新浪实时刷新`
 
   return (
     <>
@@ -257,9 +309,7 @@ cd market-dashboard && npm run holdings:export`}</pre>
             <span className={`section-head__dot${isLive ? ' section-head__dot--live' : ''}`} aria-hidden="true" />
             我的持仓
           </h2>
-          <p className="section-head__sub">
-            现价{liveNote}
-          </p>
+          <p className="section-head__sub">{liveNote}</p>
         </div>
         <div className="section-head__meta">
           {interfaceDown ? (
@@ -269,13 +319,21 @@ cd market-dashboard && npm run holdings:export`}</pre>
               {quotes?.session.label} · {pricedAtPrevClose ? '按昨收计' : '暂无报价'}
             </span>
           ) : closed ? (
-            // 收盘后仍在按 60s 取数（拿到的是收盘价），所以圆点保持红色，
-            // 但标签要与副标题口径一致，不再写「实时」。
+            // 收盘后已停止轮询，标签与副标题口径一致：写「收盘价」而不是「实时」
             <span className="tag tag--ghost">已收盘 · {quotes?.ts}</span>
           ) : (
             <span className="tag">实时 · {quotes?.ts}</span>
           )}
           <span className="tag tag--ghost">单位：元</span>
+          {/* 收盘后不再自动取数，留一个手动出口：跑完 holdings:snapshot 后点一下即可拉到当天的记录。
+              样式与大盘看板 LiveStrip 的同名按钮一致（btn--mini-primary）。 */}
+          <button
+            type="button"
+            className="btn btn--mini btn--mini-primary"
+            onClick={() => setRefreshKey((k) => k + 1)}
+          >
+            立即刷新
+          </button>
         </div>
       </section>
 
@@ -350,6 +408,23 @@ cd market-dashboard && npm run holdings:export`}</pre>
 
         <ChartCard
           index="图 2"
+          title="分组相对强弱（相对沪深300）"
+          subtitle="每组相对基准的累计超额收益，0 上方＝跑赢。组间垂直距离＝同样一笔钱放不同组的差别，也就是「该站在哪条腿上」"
+          className="chart-card--wide"
+          meta={
+            <>
+              <span className="tag">等权归一</span>
+              <span className="tag tag--ghost">
+                {groupRs ? `${groupRs.groups.length} 组 · 至 ${groupRs.as_of ?? '—'}` : '尚无数据'}
+              </span>
+            </>
+          }
+        >
+          <GroupRsChart data={groupRs} loaded={groupRsLoaded} />
+        </ChartCard>
+
+        <ChartCard
+          index="图 3"
           title="分组结构：市值占比 vs 盈亏贡献"
           subtitle="两根条越不成比例，说明这组对总盈亏的影响远超它的仓位占比——亏损组向左、盈利组向右，0 处为参考线"
           className="chart-card--wide"
@@ -364,7 +439,7 @@ cd market-dashboard && npm run holdings:export`}</pre>
         </ChartCard>
 
         <ChartCard
-          index="图 3"
+          index="图 4"
           title="个股盈亏排行"
           subtitle="按盈亏金额排序（最惨在最上，盈利的在下方），颜色深浅表示盈亏幅度；金额与幅度不一致时以金额看痛点"
           className="chart-card--wide"
