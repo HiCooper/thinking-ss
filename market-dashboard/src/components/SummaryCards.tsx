@@ -4,7 +4,6 @@ import {
   column,
   latestWith,
   marginTotalOf,
-  movingAverage,
   pctChange,
   prevNonNull,
   valueLookback,
@@ -42,23 +41,23 @@ export default function SummaryCards({ rows }: SummaryCardsProps) {
   const metrics = useMemo<Metric[]>(() => {
     const last = rows.length > 0 ? rows[rows.length - 1] : null
 
-    // —— 科创50：指数自身的位置 ——
-    // 另外三张卡（成交额 / 两融 / 10Y 美债）全是「环境读数」：量够不够、杠杆在不在加、
-    // 海外利率压不压估值。没有一张回答「指数现在站在哪里」—— 而「追还是等」恰恰取决于位置。
-    // 底部那条固定指数条只给当日快照，不给历史位置，所以这个位置感只能由摘要卡补。
-    const star = latestWith(rows, 'star50')
-    const starCol = column(rows, 'star50')
-    const starPrev = star ? prevNonNull(rows, 'star50', star.index) : null
-    const starChg = star ? pctChange(star.value, starPrev ? starPrev.value : null) : null
-    // MA20 用整列算（movingAverage 自带窗口首部补 null），取最新有效那一行的值
-    const starMa20 = star ? movingAverage(starCol, 20)[star.index] : null
-    const starVsMa = isNum(star?.value) && isNum(starMa20) ? (star.value / starMa20 - 1) * 100 : null
-    // 区间高/低只统计到「最新有效那一行」为止 —— 末行可能是 null（当日未定稿）
-    const starWindow = star ? starCol.slice(0, star.index + 1).filter((v): v is number => isNum(v)) : []
-    const starHi = starWindow.length > 0 ? Math.max(...starWindow) : null
-    const starLo = starWindow.length > 0 ? Math.min(...starWindow) : null
-    const starVsHi = isNum(star?.value) && isNum(starHi) ? (star.value / starHi - 1) * 100 : null
-    const starVsLo = isNum(star?.value) && isNum(starLo) ? (star.value / starLo - 1) * 100 : null
+    // —— 杠杆率（融资余额 / 流通市值）——
+    // 与紧邻的「两融余额」卡**互为正反面**：两融余额是杠杆的绝对规模（会被流通市值的增长稀释），
+    // 杠杆率是相对市场总盘子的拥挤度。实测 2026-09-16 两者分位相反（两融 44% 看着中性，
+    // 杠杆率 73% 其实偏拥挤）—— 这个反差本身就是读数，并排放才看得出来。
+    // 它也是唯一让「流通市值」这个分母露面的地方（换手率与杠杆率都靠它归一）。
+    const lev = latestWith(rows, 'margin_rz_ratio')
+    const levCol = column(rows, 'margin_rz_ratio')
+    const levPrev = lev ? prevNonNull(rows, 'margin_rz_ratio', lev.index) : null
+    const levChg = lev ? pctChange(lev.value, levPrev ? levPrev.value : null) : null
+    const levBase = lev
+      ? valueLookback(rows, 'margin_rz_ratio', lev.index, 20)
+      : null
+    const levChg20 = lev && levBase ? pctChange(lev.value, levBase.value) : null
+    // 分子分母取**同一行**：杠杆率是当日两值之比，跨日取会算出一个不存在的数
+    const levRow = lev ? lev.row : null
+    const levRz = valueOf(levRow, 'margin_rz')
+    const levCap = valueOf(levRow, 'float_mktcap')
 
     // —— 成交额 ——
     const turnover = dayChangePct(rows, 'turnover_total')
@@ -104,34 +103,6 @@ export default function SummaryCards({ rows }: SummaryCardsProps) {
 
     return [
       {
-        // 「最新交易日」原来占第一格，但它和小字说明 / 板块标题里的日期完全重复，已撤掉：
-        // 日期改由各卡自己的 hint 承担（KOSPI/科创50 的末行可能是 null，hint 才真正必要）。
-        key: 'star50',
-        label: '科创50',
-        value: fmtNum(star?.value, 2),
-        unit: '点',
-        trend: starChg,
-        hint: star ? star.row.date : undefined,
-        pctRank: percentileInfo(starCol, star?.value ?? null)?.rank ?? null,
-        details: [
-          { label: '日变动', text: fmtPct(starChg), trend: starChg },
-          {
-            label: '较 20 日均线',
-            text: isNum(starVsMa) ? `${fmtPct(starVsMa)}（MA20 ${fmtNum(starMa20, 2)}）` : '—',
-            trend: starVsMa,
-            title: '指数自身的技术位：站上/跌破 20 日均线是短期趋势最常用的一条分界',
-          },
-          {
-            label: '距区间高 / 低',
-            text: `${fmtPct(starVsHi)} / ${fmtPct(starVsLo)}`,
-            title:
-              isNum(starHi) && isNum(starLo)
-                ? `窗口内近 ${starWindow.length} 个交易日收盘区间 ${fmtNum(starLo, 2)} ~ ${fmtNum(starHi, 2)}`
-                : '窗口内区间不可用',
-          },
-        ],
-      },
-      {
         key: 'turnover',
         label: '两市成交额',
         value: fmtInt(turnover.cur?.value),
@@ -147,6 +118,32 @@ export default function SummaryCards({ rows }: SummaryCardsProps) {
           {
             label: '沪 / 深',
             text: `${fmtInt(valueOf(tRow, 'turnover_sh'))} / ${fmtInt(valueOf(tRow, 'turnover_sz'))}`,
+          },
+        ],
+      },
+      {
+        // 顺序：量能 → 杠杆的两种读法 → 海外利率。杠杆率与两融余额**必须相邻**，
+        // 否则「同一天一个 44% 分位、一个 73% 分位」这个对照看不出来。
+        key: 'leverage',
+        label: '杠杆率',
+        value: fmtNum(lev?.value, 3),
+        unit: '%',
+        trend: levChg,
+        hint: lev ? lev.row.date : undefined,
+        pctRank: percentileInfo(levCol, lev?.value ?? null)?.rank ?? null,
+        details: [
+          { label: '日变动', text: fmtPct(levChg), trend: levChg },
+          {
+            label: '20 日变动',
+            text: fmtPct(levChg20),
+            trend: levChg20,
+            title: '与 20 个交易日前比 —— 去杠杆 / 加杠杆的方向',
+          },
+          {
+            label: '融资 / 流通市值',
+            text: `${fmtInt(levRz)} / ${fmtInt(levCap)}`,
+            title: '杠杆率的分子与分母（亿元，取同一交易日）。' +
+              '两融绝对值会被流通市值的增长稀释，比率才能跨时间比较 —— 与右侧「两融余额」卡对照看',
           },
         ],
       },
