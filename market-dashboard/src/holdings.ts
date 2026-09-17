@@ -258,15 +258,23 @@ export async function fetchHoldingQuotes(signal?: AbortSignal): Promise<HoldingQ
 
 /* ------------------------------ 逐只计算 ------------------------------ */
 
-/** 生效价来源：live = 实时报价；snapshot = 回退到快照价。 */
-export type PriceSource = 'live' | 'snapshot'
+/**
+ * 生效价来源（按优先级）：
+ * - `live` —— 实时报价（现价 > 0）；
+ * - `prevclose` —— **用昨收当现价**：盘前（开盘前行情源把现价返回 0）或该只停牌。
+ *   此时「今日涨跌 / 今日盈亏」按定义为 0，市值等于昨收市值 ——
+ *   还没开盘就说「今天赚了 X 元」是错的。昨收是权威且最新的收盘价。
+ * - `snapshot` —— 兜底：接口整体拿不到（静态部署 / 网络失败），连昨收都没有，
+ *   只能用 `holdings.md` 里那次导出的快照价。
+ */
+export type PriceSource = 'live' | 'prevclose' | 'snapshot'
 
 export interface HoldingCell extends HoldingRow {
   groupName: string
-  /** 生效现价（实时优先，否则快照价） */
+  /** 生效现价（实时 → 昨收 → 快照价） */
   price: number
   priceSource: PriceSource
-  /** 当日涨跌幅 %（只有实时报价才有） */
+  /** 当日涨跌幅 %（实时报价有；按昨收计价时为 0） */
   chgPct: number | null
   /** 当日成交额（亿元，只有实时报价才有） */
   amount: number | null
@@ -278,7 +286,7 @@ export interface HoldingCell extends HoldingRow {
   pnl: number
   /** 浮动盈亏率（-0.1 = -10%） */
   pnlPct: number
-  /** 今日盈亏（相对昨收，只有实时报价才有） */
+  /** 今日盈亏（相对昨收；拿不到昨收时为 null） */
   todayPnl: number | null
   /** 回本所需涨幅（0.2 = 还需涨 20%） */
   breakevenPct: number
@@ -292,13 +300,22 @@ export function buildCells(file: HoldingsFile, quotes: HoldingQuotesFile | null)
   return file.rows.map((row) => {
     const q = byCode.get(row.code)
     const livePrice = q && isNum(q.price) && q.price > 0 ? q.price : null
-    const priceSource: PriceSource = livePrice === null ? 'snapshot' : 'live'
-    const price = livePrice ?? row.snapshot_price
+    const prevClose = q && isNum(q.prev_close) && q.prev_close > 0 ? q.prev_close : null
+    /**
+     * 没有实时价时**优先用昨收**，而不是回退到 `holdings.md` 的快照价。
+     *
+     * 快照价是「用户上次导出持仓时的价」，可能已隔一天以上（如 9-16 12:05 的中午价）；
+     * 昨收却是**权威且更新的最近收盘价**。更要紧的是：盘前用昨收计价，今日盈亏天然为 0 ——
+     * 这才是符合定义的（还没开盘，今天确实没赚没亏）。用快照价则会算成
+     * `份额 ×（快照价 − 昨收）`，一个既不是 0 也没有意义的数。
+     */
+    const priceSource: PriceSource =
+      livePrice !== null ? 'live' : prevClose !== null ? 'prevclose' : 'snapshot'
+    const price = livePrice ?? prevClose ?? row.snapshot_price
 
     const marketValue = row.shares * price
     const costValue = row.shares * row.cost
     const pnl = marketValue - costValue
-    const prevClose = q && isNum(q.prev_close) && q.prev_close > 0 ? q.prev_close : null
     const todayPnl = prevClose === null ? null : row.shares * (price - prevClose)
 
     return {
@@ -306,7 +323,8 @@ export function buildCells(file: HoldingsFile, quotes: HoldingQuotesFile | null)
       groupName: groupNames.get(row.group) ?? row.group,
       price,
       priceSource,
-      chgPct: priceSource === 'live' ? (q?.chg_pct ?? null) : null,
+      // 按昨收计价时「今日涨跌」定义为 0（price === prevClose），不是「没有数据」
+      chgPct: priceSource === 'live' ? (q?.chg_pct ?? null) : priceSource === 'prevclose' ? 0 : null,
       amount: priceSource === 'live' ? (q?.amount ?? null) : null,
       marketValue,
       costValue,
@@ -335,8 +353,12 @@ export interface PortfolioTotals {
    * 分母会被当天自己的涨跌带着跑，涨时低估涨幅、跌时高估跌幅。昨收市值为 0 或负时为 null。
    */
   todayPnlPct: number | null
-  /** 今日有报价的只数 */
+  /** 有实时报价的只数 */
   liveCount: number
+  /** 按**昨收**计价的只数（盘前 / 停牌） */
+  prevCloseCount: number
+  /** 退到 `holdings.md` 快照价的只数（接口整体拿不到时才会 > 0） */
+  snapshotCount: number
   /** 距成本：亏损时为「还需涨多少回本」，盈利时为「可回撤多少仍不亏」（小数） */
   breakevenPct: number
   /** 盈亏绝对额之和 —— 所有「贡献占比」的分母（对盈亏混合的组合也成立） */
@@ -368,6 +390,8 @@ export function portfolioTotals(cells: HoldingCell[]): PortfolioTotals {
     todayPnl,
     todayPnlPct: todayPnl !== null && prevValue !== null && prevValue > 0 ? todayPnl / prevValue : null,
     liveCount: cells.filter((c) => c.priceSource === 'live').length,
+    prevCloseCount: cells.filter((c) => c.priceSource === 'prevclose').length,
+    snapshotCount: cells.filter((c) => c.priceSource === 'snapshot').length,
     breakevenPct: marketValue > 0 ? (costValue - marketValue) / marketValue : 0,
     grossPnl: cells.reduce((s, c) => s + Math.abs(c.pnl), 0),
     losers: losersList.length,

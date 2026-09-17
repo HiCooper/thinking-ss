@@ -62,6 +62,9 @@ const COLUMNS: Column[] = [
       <span className={c.priceSource === 'snapshot' ? 'holdings-price--snapshot' : undefined}>
         {c.price.toFixed(3)}
         {c.priceSource === 'snapshot' ? <em className="holdings-snap-dot" title="快照价" /> : null}
+        {c.priceSource === 'prevclose' ? (
+          <em className="holdings-close-dot" title="昨收价（盘前或停牌）：今日涨跌按 0 计" />
+        ) : null}
       </span>
     ),
   },
@@ -189,8 +192,10 @@ export default function HoldingsTable({ cells, groups }: HoldingsTableProps) {
           </h2>
           <p className="chart-card__subtitle">
             点击表头排序 · 默认按浮动盈亏从小到大（最惨在前）；带
+            <em className="holdings-close-dot holdings-snap-dot--inline" />
+            的是<b>昨收价</b>（盘前 / 停牌，今日涨跌按 0 计），带
             <em className="holdings-snap-dot holdings-snap-dot--inline" />
-            的是快照价（无实时报价时的回退）
+            的是快照价（接口整体不可用时的兜底）
           </p>
         </div>
         <div className="chart-card__meta">

@@ -631,16 +631,19 @@ function buildHoldingQuote(code: string, fields: string[] | undefined): HoldingQ
   if (!fields) return base
 
   const price = toNum(fields[3])
+  // 停牌 / 盘前现价为 0.00，照抄会显示成「跌 100%」，统一归 null 交给前端占位。
+  // ⚠️ chg_pct 必须用**归一后**的价算：否则会出现「price 是 null、chg_pct 却是 −100%」
+  // 这种自相矛盾的数据（盘前每只都中招），下游若只读 chg_pct 就会拿到假的 −100%。
+  const livePrice = price !== null && price > 0 ? price : null
   return {
     ...base,
     name: fields[0]?.trim() || null,
-    // 停牌时现价为 0.00，照抄会显示成「跌 100%」，统一归 null 交给前端占位
-    price: price !== null && price > 0 ? price : null,
+    price: livePrice,
     prev_close: toNum(fields[2]),
     open: toNum(fields[1]),
     high: toNum(fields[4]),
     low: toNum(fields[5]),
-    chg_pct: chgPct(price, toNum(fields[2])),
+    chg_pct: chgPct(livePrice, toNum(fields[2])),
     amount: yi(toNum(fields[9])),
     // [30] = 行情日期。只接受 YYYY-MM-DD 形状，避免不同品种字段错位时把脏值传出去
     quote_date: /^\d{4}-\d{2}-\d{2}$/.test(fields[30] ?? '') ? fields[30] : null,

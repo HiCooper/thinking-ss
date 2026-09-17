@@ -206,8 +206,21 @@ cd market-dashboard && npm run holdings:export`}</pre>
     )
   }
 
+  // 圆点「亮」= 至少有实时报价；盘前按昨收计价时**不亮**（避免看起来像在实时跳动）
   const isLive = quotes !== null && totals.liveCount > 0
   const allLive = totals.liveCount === totals.count
+  /**
+   * ⚠️ 「接口拿不到」和「接口拿到了但还没有价」是两件事，别混。
+   *
+   * `quotes === null` 才是**真·接口不可用**（静态部署 404 / 网络失败 / 返回非 JSON）。
+   * 盘前（尤其 09:15 集合竞价前）新浪对每只都返回现价 0.00，插件归一成 null，
+   * 于是 `liveCount === 0`——接口其实完全正常，只是报价还没生成。
+   * 早先把这种情况也写成「/api/holdings 不可用」，盘前看一眼就会误判成服务挂了。
+   */
+  const interfaceDown = quotesLoaded && quotes === null
+  const noQuoteYet = quotesLoaded && quotes !== null && totals.liveCount === 0
+  /** 此刻是否在用昨收计价（盘前 / 停牌）：此时今日盈亏按定义为 0 */
+  const pricedAtPrevClose = quotes !== null && totals.prevCloseCount > 0
   // 现价刷新口径的说明。间隔直接由常数换算，避免改了间隔忘了改文案。
   // 收盘后价格不再变动，退避到 QUOTES_POLL_CLOSED_MS，这里如实写明。
   const closed = quotes?.session.state === 'closed'
@@ -227,11 +240,13 @@ cd market-dashboard && npm run holdings:export`}</pre>
   })()
   const recordDue =
     closed && latestQuoteDate !== null && (lastRecordDate === null || lastRecordDate < latestQuoteDate)
-  const liveNote = !isLive
+  const liveNote = interfaceDown
     ? '因无实时接口而降级为快照价'
-    : closed
-      ? `已收盘，每 ${QUOTES_POLL_CLOSED_MS / 1000} 秒刷新一次（收盘价不再变动）`
-      : `每 ${QUOTES_POLL_MS / 1000} 秒从新浪实时刷新`
+    : noQuoteYet
+      ? `接口已连通，但此刻还没有实时价（${quotes?.session.label ?? '非交易时段'}），按昨收价计`
+      : closed
+        ? `已收盘，每 ${QUOTES_POLL_CLOSED_MS / 1000} 秒刷新一次（收盘价不再变动）`
+        : `每 ${QUOTES_POLL_MS / 1000} 秒从新浪实时刷新`
 
   return (
     <>
@@ -243,13 +258,16 @@ cd market-dashboard && npm run holdings:export`}</pre>
             我的持仓
           </h2>
           <p className="section-head__sub">
-            共 {totals.count} 只 · 快照 {state.file.as_of} · {state.file.account}；
-            份额与成本来自 <code>holdings.md</code>，现价{liveNote}
+            现价{liveNote}
           </p>
         </div>
         <div className="section-head__meta">
-          {!isLive ? (
+          {interfaceDown ? (
             <span className="tag tag--ghost">静态快照 · 无实时接口</span>
+          ) : noQuoteYet ? (
+            <span className="tag tag--ghost">
+              {quotes?.session.label} · {pricedAtPrevClose ? '按昨收计' : '暂无报价'}
+            </span>
           ) : closed ? (
             // 收盘后仍在按 60s 取数（拿到的是收盘价），所以圆点保持红色，
             // 但标签要与副标题口径一致，不再写「实时」。
@@ -265,17 +283,33 @@ cd market-dashboard && npm run holdings:export`}</pre>
         <p className="holdings-notice muted">正在读取 /api/holdings …</p>
       ) : null}
 
-      {quotesLoaded && !isLive ? (
+      {interfaceDown ? (
         <p className="holdings-notice holdings-notice--warn">
           实时接口 <code>/api/holdings</code> 不可用：页面显示的是 <b>{state.file.as_of}</b> 的快照价，
           浮动盈亏为当时的数值。请通过 <code>npm start</code>（dev / preview）访问以获得实时报价。
+        </p>
+      ) : noQuoteYet && pricedAtPrevClose ? (
+        <p className="holdings-notice muted">
+          实时接口 <code>/api/holdings</code> <b>已连通</b>（{quotes?.session.label}）——
+          行情源在开盘前把现价返回 <code>0</code>，此刻按 <b>昨收价</b> 计价，
+          所以「今日涨跌 / 今日盈亏」为 <b>0</b>（还没开盘，今天确实没赚没亏），
+          市值即昨收市值。开盘后自动切回实时价，无需刷新。
+        </p>
+      ) : noQuoteYet ? (
+        <p className="holdings-notice holdings-notice--warn">
+          实时接口 <code>/api/holdings</code> 已连通，但这 {totals.count} 只<b>连昨收都没取到</b>
+          （行情源字段异常），只能退到 <b>{state.file.as_of}</b> 的快照价；此时「今日盈亏」为
+          「—」而不是 0。
         </p>
       ) : null}
 
       {!allLive && isLive ? (
         <p className="holdings-notice holdings-notice--warn">
-          有 {totals.count - totals.liveCount} 只未取到实时报价，已回退为快照价（表格中带
-          <em className="holdings-snap-dot holdings-snap-dot--inline" /> 标记）。
+          有 {totals.count - totals.liveCount} 只未取到实时报价
+          {totals.prevCloseCount > 0 ? <>，其中 {totals.prevCloseCount} 只按<b>昨收价</b>计（带
+            <em className="holdings-close-dot holdings-snap-dot--inline" /> 标记）</> : null}
+          {totals.snapshotCount > 0 ? <>，{totals.snapshotCount} 只退到<b>快照价</b>（带
+            <em className="holdings-snap-dot holdings-snap-dot--inline" /> 标记）</> : null}。
         </p>
       ) : null}
 

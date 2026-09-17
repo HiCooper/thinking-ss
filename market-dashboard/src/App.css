@@ -1140,6 +1140,21 @@ code {
   vertical-align: middle;
 }
 
+/*
+ * 昨收价标记（盘前 / 停牌）。
+ * 与「快照价」刻意用不同颜色，且**不给价格置灰** —— 昨收是权威价、不算降级，
+ * 只是此刻还没有实时价；置灰会让人误以为这个数不可信。
+ */
+.holdings-close-dot {
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  margin-left: 5px;
+  border-radius: 50%;
+  background: #aab6c6;
+  vertical-align: middle;
+}
+
 .holdings-snap-dot--inline {
   display: inline-block;
   margin: 0 4px;

@@ -73,7 +73,7 @@ export default function HoldingsPnlChart({ cells }: HoldingsPnlChartProps) {
               undefined,
               '成本 / 现价',
               `${c.cost.toFixed(3)} → ${c.price.toFixed(3)}`,
-              c.priceSource === 'live' ? '实时' : '快照',
+              c.priceSource === 'live' ? '实时' : c.priceSource === 'prevclose' ? '昨收' : '快照',
             )
           )
         },

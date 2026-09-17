@@ -134,7 +134,8 @@ cd market-dashboard && npm run typecheck && npm run build                       
 | `Error: Port 5183 is already in use` | 端口被占 | `PORT=5190 npm start`；或先找出并杀掉占用进程（注意 vite 会 fork，`lsof -ti :5183` 可能不止一个 PID） |
 | `✗ 缺少 public/data.json` | 数据文件没拿到 | `npm run data:refresh -- --offline`（用仓库内缓存离线重建）；或 `npm run data:setup && npm run data:refresh` |
 | 页面能开，但「实时行情」显示「实时接口不可用」 | 不是用 dev / preview 打开的（静态托管没有 Node 服务端） | 用 `npm start` 或 `npm run preview` 打开；静态托管下这是**预期降级**，不是 bug |
-| 持仓看板提示「实时接口 /api/holdings 不可用」 | 同上 | 同上；降级时页面会显示快照价并明确标注 |
+| 持仓看板提示「实时接口 /api/holdings 不可用」 | 不是用 dev / preview 打开的（静态托管没有 Node 服务端） | 用 `npm start` 或 `npm run preview` 打开；静态托管下这是**预期降级**，不是 bug |
+| 持仓看板提示「已连通（盘前）…按昨收价计价」 | **正常状态**，不是故障：开盘前行情源把现价返回 0，此刻按昨收计价，今日盈亏按定义为 0 | 无需处理；开盘后自动切回实时价。**不要**因为看到这条就去重启服务（服务是好的） |
 | `npm ci` 失败（网络） | 装依赖要联网 | 换网络 / 配镜像；不要退回 `npm install`（会破坏 lock 一致性） |
 | `npm run holdings:export` 报 `No such file` | 在错误目录跑了，或 `python3` 不存在 | 必须在 `market-dashboard/` 下跑；Windows 上把 `python3` 换成 `python`（脚本只用标准库） |
 
