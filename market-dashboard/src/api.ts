@@ -5,6 +5,7 @@ import type {
   SpotA50,
   SpotCn,
   SpotData,
+  SpotHkItem,
   SpotIndex,
   SpotKoreaItem,
   SpotSession,
@@ -177,6 +178,18 @@ function normalizedKorea(raw: unknown): SpotKoreaItem | null {
   }
 }
 
+/** 港股指数（恒生科技）：形状同 normalizedKorea，但服务端下标不同，所以走独立入口。 */
+function normalizedHk(raw: unknown): SpotHkItem | null {
+  const o = objOf(raw)
+  if (!o) return null
+  return {
+    name: strOf(o, 'name') ?? '—',
+    price: toNum(o.price),
+    chg_pct: toNum(o.chg_pct),
+    time: strOf(o, 'time'),
+  }
+}
+
 const SESSION_STATES: SessionState[] = ['pre', 'open', 'lunch', 'closed']
 
 /** 分时序列：points/times 必须等长且 ≥2 点才有意义，否则整体降级为 null。 */
@@ -223,11 +236,13 @@ function normalizeSpot(raw: unknown): SpotData {
     a50: normalizedFuture(o.a50),
     nq: normalizedFuture(o.nq),
     korea: kospi || kosdaq ? { kospi, kosdaq } : null,
+    hstech: normalizedHk(o.hstech),
     spark: {
       a50: sparkRaw ? normalizedSpark(sparkRaw.a50) : null,
       nq: sparkRaw ? normalizedSpark(sparkRaw.nq) : null,
       kospi: sparkRaw ? normalizedSpark(sparkRaw.kospi) : null,
       kosdaq: sparkRaw ? normalizedSpark(sparkRaw.kosdaq) : null,
+      hstech: sparkRaw ? normalizedSpark(sparkRaw.hstech) : null,
     },
     errors: Array.isArray(o.errors) ? o.errors.filter((e): e is string => typeof e === 'string') : [],
   }

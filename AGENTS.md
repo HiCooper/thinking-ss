@@ -125,7 +125,7 @@ cd market-dashboard && npm run typecheck && npm run build                       
 
 有条件用无头浏览器时，再确认渲染结果（这是真正能证明「跑起来了」的检查）：
 
-- 大盘看板：4 张摘要卡（成交额/两融/10Y 美债三张带 `NN% 分位` 角标）、5 张图（`canvas` 5 个，图 3/图 4 带分位灰带）、3 张实时报价卡、底部固定指数条 5 个指数
+- 大盘看板：4 张摘要卡（**科创50 / 成交额 / 两融 / 10Y 美债**，四张都带 `NN% 分位` 角标）、5 张图（`canvas` 5 个，图 3/图 4 带分位灰带）、**4 张实时报价卡**（A50 / KOSPI / NQ / 恒生科技，1440px 四等分、≤1080px 2×2、≤680px 单列）、底部固定指数条 5 个指数
 - 持仓看板：明细行数 = `holdings.json` 里的条数 + **4 张图**（图 1 账户收益走势｜图 2 分组相对强弱｜图 3 分组结构｜图 4 个股盈亏排行）+ 总览卡 4 张。四张图**缺数据时都渲染引导而非空图**（`groups.json` 不存在是 clone 后的预期状态）
 - 控制台**无未捕获异常**
 
@@ -320,6 +320,8 @@ python3 scripts/export_holdings.py --check  # 只校验不写文件
 |---|---|
 | `src/format.ts` | **金额（元）一律精确到分**，走 `fmtYuan` / `fmtSignedYuan`；**不要**用 `fmtNum` / `fmtSigned` 直接格式化金额（那是展示偏好，金额位数是口径）。份额、单价（元/份）、收益率、`亿元`（成交额/两融/流通市值）与图表坐标轴刻度都不适用 |
 | `src/stats.ts` | 历史分位（百分位排名 + P20/P50/P80）。窗口取尾部 250 个**非 null** 值，样本 < 20 返回 `null`（小样本分位数是噪音）。分位带走 `chartTheme.percentileBand()`，用 `markArea`/`markLine` 而不是加数据线 |
+| `src/components/SummaryCards.tsx` | 四张卡：**科创50（点位 / 较 MA20 / 距区间高·低）、成交额、两融、10Y 美债**。「最新交易日」那张已删（与小字说明重复）——**不要把只有日期的卡加回来**。`star50` 末行可能是 `null`（当日未定稿），所有派生量都要先取 `latestWith` 的 index 再截断 |
+| `scripts/export_data.py` | **日K来源的列（`kospi` / `star50`）必须过 `kline_ok()`**：盘中刷新会拿到没走完的当日 K 线（实测 09:32 把 1623.06 写成当日值，真实收盘 1606.29）。当日不到 `KLINE_FINAL_MINUTES`（15:05）就置 `null`，与两融同一约定。新增日K来源的列时**照做** |
 | `src/holdings.ts` | `GroupStat.pnlContribution` 是**有符号**的；新增派生指标时保持对正负都成立 |
 | `src/components/HoldingsStructureChart.tsx` | 发散条形图：`yAxis.axisLine.onZero = false` 让类目名贴左（否则压在负向条上），0 处靠 `markLine` 标出 |
 | `src/components/HoldingsPnlChart.tsx` | `xAxis` 的 `min/max` 必须同时覆盖正负；配色用 `chartTheme.pnlColor()` |

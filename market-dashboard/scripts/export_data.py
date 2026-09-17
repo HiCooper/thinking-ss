@@ -11,6 +11,9 @@
    缓存只增不减 —— 所以以后想把窗口放宽到 `--days 500`，也只会补缺失的那部分。
 3. **断网兜底**：某个在线源失败时，自动退回本地缓存（该列不会突然变空），并写入报告。
 4. **`--offline`**：完全不联网，纯用本地缓存重建 data.json（用于校验/演示/网络故障时）。
+5. **时点语义要统一**：来自**交易所官方序列**的列（成交额 / 流通市值 / 两融）当日未公布就是
+   `None`；来自**日K**的列（KOSPI / 科创50）盘中会拿到一根**没走完的当日 K 线**，
+   所以同样必须「未定稿就置 null」—— 见 `KLINE_FINAL_MINUTES` 与 `kline_ok()`。
 
 用法（必须用带 akshare 的 venv；一般直接用 `npm run data:refresh`）：
   $SKILLS/akshare-data/.venv/bin/python scripts/export_data.py [--days 250] [--offline]
@@ -22,7 +25,7 @@ import json
 import sys
 import time
 import warnings
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 warnings.filterwarnings("ignore")
@@ -88,6 +91,23 @@ def tx_daily(symbol, n):
     url = f"https://web.ifzq.gtimg.cn/appstock/app/kline/kline?param={symbol},day,,,{n + 60}"
     r = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=20).json()
     return [(x[0], float(x[2])) for x in r["data"][symbol]["day"]]
+
+
+# 日K来源的列（KOSPI / 科创50）在**当日收盘前不能采信**：腾讯日K与新浪全球指数在盘中都会
+# 返回一根没走完的当日 K 线。实测 2026-09-17 09:32 刷新把 star50=1623.06 写成了当日值，
+# 而当日真实收盘是 1606.29（差 +1.04%）—— 它看起来合法，所以比 null 危险得多。
+# 同一行的成交额/两融走交易所官方序列，当日未公布天然是 None。两种源的时点语义必须对齐。
+KLINE_FINAL_MINUTES = 15 * 60 + 5      # 15:05：收盘集合竞价 15:00 结束，行情源还要几分钟才定稿
+
+
+def beijing_now():
+    """北京时间。机器时区不一定是 Asia/Shanghai，统一按 UTC+8 偏移算。"""
+    return datetime.now(timezone.utc).astimezone(timezone(timedelta(hours=8)))
+
+
+def kline_ok(day: str, today: str, today_final: bool) -> bool:
+    """日K来源的列在 `day` 这一行是否已定稿：非今天一律算定稿，今天要等过 15:05。"""
+    return day != today or today_final
 
 
 def resolve_calendar(n, sc, offline):
@@ -272,6 +292,15 @@ def main():
     cn10y = fill_forward(series["cn10y"], days)
     kospi = fill_forward(series["kospi"], days)
 
+    now_bj = beijing_now()
+    today_bj = now_bj.strftime("%Y-%m-%d")
+    today_final = now_bj.hour * 60 + now_bj.minute >= KLINE_FINAL_MINUTES
+    if not today_final and today_bj in days:
+        report.append(
+            f"⚠ {today_bj} 未到 {KLINE_FINAL_MINUTES // 60}:{KLINE_FINAL_MINUTES % 60:02d}（北京时间 "
+            f"{now_bj:%H:%M}），KOSPI / 科创50 的当日值视为未定稿 → **置空**（与两融同一约定）"
+        )
+
     rows = []
     for d in days:
         o = official.get(d)
@@ -288,11 +317,12 @@ def main():
             "margin_rz": rz_d, "margin_rq": rq_d,
             "margin_total": round(rz_d + rq_d, 1) if (rz_d is not None and rq_d is not None) else None,
             "margin_rz_ratio": round(rz_d / float_cap * 100, 3) if (rz_d is not None and float_cap) else None,
-            "kospi": kospi.get(d), "star50": series["star50"].get(d),
+            "kospi": kospi.get(d) if kline_ok(d, today_bj, today_final) else None,
+            "star50": series["star50"].get(d) if kline_ok(d, today_bj, today_final) else None,
         })
 
     payload = {
-        "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M") + " CST",
+        "generated_at": now_bj.strftime("%Y-%m-%d %H:%M") + " CST",
         "sources": "成交额与流通市值=上交所/深交所官方日度（stock_sse_deal_daily + stock_szse_summary）；"
                    "国债收益率=新浪全球国债（US10YT/CN10YT，按A股日历前值填充）；"
                    "两融=沪深交易所宏观序列（akshare macro_china_market_margin_sh/sz）；"
@@ -313,7 +343,7 @@ def main():
 
     # ---- 增量报告（stdout，给 npm run data:refresh 用） ----
     print("─" * 68)
-    print(f"数据更新完成 · {datetime.now():%Y-%m-%d %H:%M:%S}｜耗时 {time.time() - t_start:.1f}s"
+    print(f"数据更新完成 · {beijing_now():%Y-%m-%d %H:%M:%S} 北京｜耗时 {time.time() - t_start:.1f}s"
           f"｜{'离线模式（纯本地缓存）' if args.offline else '增量模式'}")
     print("─" * 68)
     for line in report:

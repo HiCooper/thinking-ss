@@ -1,6 +1,16 @@
 import { useMemo } from 'react'
-import { column, latestWith, marginTotalOf, pctChange, bpDiff, prevNonNull, valueLookback, valueOf } from '../calc'
-import { fmtBp, fmtDateCN, fmtInt, fmtNum, fmtPct, fmtSigned, trendClass, isNum } from '../format'
+import {
+  bpDiff,
+  column,
+  latestWith,
+  marginTotalOf,
+  movingAverage,
+  pctChange,
+  prevNonNull,
+  valueLookback,
+  valueOf,
+} from '../calc'
+import { fmtBp, fmtInt, fmtNum, fmtPct, fmtSigned, trendClass, isNum } from '../format'
 import { PERCENTILE_WINDOW, percentileInfo } from '../stats'
 import type { MarketRow } from '../types'
 
@@ -31,7 +41,24 @@ const dayChangePct = (rows: MarketRow[], key: Parameters<typeof latestWith>[1]) 
 export default function SummaryCards({ rows }: SummaryCardsProps) {
   const metrics = useMemo<Metric[]>(() => {
     const last = rows.length > 0 ? rows[rows.length - 1] : null
-    const lastDate = last ? last.date : '—'
+
+    // —— 科创50：指数自身的位置 ——
+    // 另外三张卡（成交额 / 两融 / 10Y 美债）全是「环境读数」：量够不够、杠杆在不在加、
+    // 海外利率压不压估值。没有一张回答「指数现在站在哪里」—— 而「追还是等」恰恰取决于位置。
+    // 底部那条固定指数条只给当日快照，不给历史位置，所以这个位置感只能由摘要卡补。
+    const star = latestWith(rows, 'star50')
+    const starCol = column(rows, 'star50')
+    const starPrev = star ? prevNonNull(rows, 'star50', star.index) : null
+    const starChg = star ? pctChange(star.value, starPrev ? starPrev.value : null) : null
+    // MA20 用整列算（movingAverage 自带窗口首部补 null），取最新有效那一行的值
+    const starMa20 = star ? movingAverage(starCol, 20)[star.index] : null
+    const starVsMa = isNum(star?.value) && isNum(starMa20) ? (star.value / starMa20 - 1) * 100 : null
+    // 区间高/低只统计到「最新有效那一行」为止 —— 末行可能是 null（当日未定稿）
+    const starWindow = star ? starCol.slice(0, star.index + 1).filter((v): v is number => isNum(v)) : []
+    const starHi = starWindow.length > 0 ? Math.max(...starWindow) : null
+    const starLo = starWindow.length > 0 ? Math.min(...starWindow) : null
+    const starVsHi = isNum(star?.value) && isNum(starHi) ? (star.value / starHi - 1) * 100 : null
+    const starVsLo = isNum(star?.value) && isNum(starLo) ? (star.value / starLo - 1) * 100 : null
 
     // —— 成交额 ——
     const turnover = dayChangePct(rows, 'turnover_total')
@@ -77,13 +104,31 @@ export default function SummaryCards({ rows }: SummaryCardsProps) {
 
     return [
       {
-        key: 'date',
-        label: '最新交易日',
-        value: lastDate === '—' ? '—' : fmtDateCN(lastDate).slice(0, 10),
-        unit: lastDate === '—' ? '' : fmtDateCN(lastDate).slice(11),
-        hint: `${rows.length} 个交易日`,
+        // 「最新交易日」原来占第一格，但它和小字说明 / 板块标题里的日期完全重复，已撤掉：
+        // 日期改由各卡自己的 hint 承担（KOSPI/科创50 的末行可能是 null，hint 才真正必要）。
+        key: 'star50',
+        label: '科创50',
+        value: fmtNum(star?.value, 2),
+        unit: '点',
+        trend: starChg,
+        hint: star ? star.row.date : undefined,
+        pctRank: percentileInfo(starCol, star?.value ?? null)?.rank ?? null,
         details: [
-          { label: '区间', text: rows.length > 1 ? `${rows[0].date} ~ ${lastDate}` : lastDate },
+          { label: '日变动', text: fmtPct(starChg), trend: starChg },
+          {
+            label: '较 20 日均线',
+            text: isNum(starVsMa) ? `${fmtPct(starVsMa)}（MA20 ${fmtNum(starMa20, 2)}）` : '—',
+            trend: starVsMa,
+            title: '指数自身的技术位：站上/跌破 20 日均线是短期趋势最常用的一条分界',
+          },
+          {
+            label: '距区间高 / 低',
+            text: `${fmtPct(starVsHi)} / ${fmtPct(starVsLo)}`,
+            title:
+              isNum(starHi) && isNum(starLo)
+                ? `窗口内近 ${starWindow.length} 个交易日收盘区间 ${fmtNum(starLo, 2)} ~ ${fmtNum(starHi, 2)}`
+                : '窗口内区间不可用',
+          },
         ],
       },
       {

@@ -98,9 +98,17 @@ export interface SpotKoreaItem {
   time: string | null
 }
 
+/** 港股指数快照（恒生科技）。形状与 SpotKoreaItem 一致，但服务端字段下标完全不同。 */
+export interface SpotHkItem {
+  name: string
+  price: number | null
+  chg_pct: number | null
+  time: string | null
+}
+
 /**
  * 迷你日内走势（下采样到 ≤120 点）。
- * `base` 是当日基准（A50 = 昨结，韩国指数 = 昨收），前端按「末值 ≥ base → 红，否则绿」上色。
+ * `base` 是当日基准（A50 = 昨结，韩国指数 / 恒生科技 = 昨收），前端按「末值 ≥ base → 红，否则绿」上色。
  */
 export interface SparkSeries {
   points: number[]
@@ -115,6 +123,8 @@ export interface SpotSpark {
   nq: SparkSeries | null
   kospi: SparkSeries | null
   kosdaq: SparkSeries | null
+  /** 恒生科技指数分时（走腾讯，新浪没有港股分时端点） */
+  hstech: SparkSeries | null
 }
 
 /** GET /api/spot 的返回结构。任一子项抓取失败时该项为 null，原因写入 errors。 */
@@ -126,6 +136,8 @@ export interface SpotData {
   /** 纳指期货：与 a50 同形（现价 + 涨跌幅 + 自己的报价时间 + 分时在 spark.nq） */
   nq: SpotA50 | null
   korea: { kospi: SpotKoreaItem | null; kosdaq: SpotKoreaItem | null } | null
+  /** 恒生科技指数：补「港股科技」这条腿 —— 港股 16:00 收盘，比 A 股晚一小时 */
+  hstech: SpotHkItem | null
   spark: SpotSpark
   errors: string[]
 }

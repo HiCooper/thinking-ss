@@ -66,6 +66,7 @@ export default function LiveStrip() {
   const a50 = data?.a50 ?? null
   const nq = data?.nq ?? null
   const kospi = data?.korea?.kospi ?? null
+  const hstech = data?.hstech ?? null
   const session = data?.session
 
   // 指数信息条：portal 到 #ticker-root（fixed 钉在屏幕底部）。容器缺失时退化为原地渲染，
@@ -166,6 +167,16 @@ export default function LiveStrip() {
               time={nq?.time ?? null}
               name="NQ"
               spark={data?.spark.nq ?? null}
+            />
+            {/* 恒生科技：面板上唯一「港股科技」读数。港股 16:00 收盘、比 A 股晚一小时，
+                所以 A 股收盘后的那一小时里，它是唯一还在动的中国科技读数 */}
+            <QuoteTile
+              label={hstech?.name || '恒生科技指数'}
+              price={hstech?.price ?? null}
+              chg={hstech?.chg_pct ?? null}
+              time={hstech?.time ?? null}
+              name="HSTECH"
+              spark={data?.spark.hstech ?? null}
             />
           </div>
 

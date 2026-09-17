@@ -404,8 +404,9 @@
 
 .live-grid {
   display: grid;
-  /* 只剩三张跨市场报价卡（成交额已并入上方摘要卡，不再重复展示）→ 三等分 */
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  /* 四张跨市场报价卡（成交额已并入上方摘要卡，不再重复展示）→ 四等分；
+     ≤1080px 落成 2×2，≤680px 单列（见下方媒体查询） */
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
 }
 

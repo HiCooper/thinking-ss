@@ -17,6 +17,10 @@
  *   - hf_CHA50CFD：[0]最新 [4]高 [5]低 [6]时间(HH:MM:SS) [7]昨结
  *   - b_KOSPI / b_KOSDAQ：[0]名称 [1]最新 [2]涨跌额 [3]涨跌幅% [6]日期 [7]时间
  *     （日期/时间的实际下标与部分文档相反，代码按 HH:MM:SS 的形状挑选）
+ *   - hkHSTECH / rt_hkHSTECH：[0]英文码 [1]中文名 [2]今开 [3]昨收 [4]最高 [5]最低
+ *     [6]现价 [7]涨跌额 [8]涨跌幅% … [17]日期 [18]时间。
+ *     ⚠️ **不要**把 [2] 当昨收：[2] 是今开（与腾讯分时首点 09:30 的价格一致），[3] 才是昨收。
+ *     `rt_` 变体的时间带秒、`hk` 变体只有 HH:MM，两个都抓、优先 `rt_`。
  */
 import type { Connect, Plugin } from 'vite'
 
@@ -31,8 +35,18 @@ const A50_SYMBOL = 'hf_CHA50CFD'
 const NQ_SYMBOL = 'hf_NQ'
 /** 韩国指数（外盘 b_ 前缀）。 */
 const KOREA_SYMBOLS = ['b_KOSPI', 'b_KOSDAQ']
+/**
+ * 恒生科技指数（港股）。抓两个变体：`rt_` 的时间带秒（`pickClock` 只认 HH:MM:SS），
+ * `hk` 是收盘口径的兜底。一次批量请求里多两个符号，没有额外往返。
+ *
+ * 为什么要它：港股 16:00 收盘、比 A 股晚一小时 —— **A 股收盘后到 16:00 这一小时，
+ * 港股科技是唯一还在动的中国科技读数**，而这个面板原有的 A50/KOSPI/NQ 全是股指期货，
+ * 缺的正是「港股科技」这条腿。
+ */
+const HK_SYMBOL = 'hkHSTECH'
+const HK_RT_SYMBOL = 'rt_hkHSTECH'
 
-const SYMBOLS = [...INDEX_SYMBOLS, A50_SYMBOL, NQ_SYMBOL, ...KOREA_SYMBOLS]
+const SYMBOLS = [...INDEX_SYMBOLS, A50_SYMBOL, NQ_SYMBOL, ...KOREA_SYMBOLS, HK_SYMBOL, HK_RT_SYMBOL]
 
 const SINA_HEADERS = {
   Referer: 'https://finance.sina.com.cn',
@@ -45,6 +59,13 @@ const futuresMinUrl = (symbol: string) =>
 /** 韩国指数分时（新浪全球指数分钟线）。 */
 const koreaMinUrl = (symbol: string) =>
   `https://gi.finance.sina.com.cn/hq/min?symbol=${symbol}&num=400`
+/**
+ * 腾讯分时（A 股 / 港股通用）。**港股必须走这条** —— 新浪的「全球指数」分时端点只认
+ * KOSPI/KOSDAQ，对 HSTECH 返回 `data: null`；新浪的 `HK_MinLineService` 也已下线
+ * （返回 `Service not valid`）。实测腾讯这条对 `hkHSTECH` 返回与 A 股同格式的数据。
+ */
+const tencentMinUrl = (code: string) =>
+  `https://web.ifzq.gtimg.cn/appstock/app/minute/query?code=${code}`
 
 /** 迷你图最多返回的点数：等距抽稀、保留首尾，降低传输与渲染开销。 */
 const SPARK_MAX_POINTS = 120
@@ -86,6 +107,14 @@ export interface SpotKoreaItem {
   time: string | null
 }
 
+/** 港股指数快照（形状与 SpotKoreaItem 一致，但**字段下标完全不同**，所以单独一个类型）。 */
+export interface SpotHkItem {
+  name: string
+  price: number | null
+  chg_pct: number | null
+  time: string | null
+}
+
 /**
  * 迷你日内走势（下采样到 ≤ SPARK_MAX_POINTS 点）。
  * `base` 是当日基准（A50 = 昨结，韩国指数 = 昨收），前端按「末值 ≥ base → 红」上色。
@@ -105,6 +134,7 @@ export interface SpotSpark {
   nq: SparkSeries | null
   kospi: SparkSeries | null
   kosdaq: SparkSeries | null
+  hstech: SparkSeries | null
 }
 
 export interface SpotPayload {
@@ -115,6 +145,8 @@ export interface SpotPayload {
   /** 纳指期货：与 a50 同形（现价 + 涨跌幅 + 自己的报价时间） */
   nq: SpotA50 | null
   korea: { kospi: SpotKoreaItem | null; kosdaq: SpotKoreaItem | null } | null
+  /** 恒生科技指数：面板上补「港股科技」这条腿，且它比 A 股晚一小时收盘 */
+  hstech: SpotHkItem | null
   spark: SpotSpark
   errors: string[]
 }
@@ -281,6 +313,27 @@ function buildKorea(quotes: QuoteMap, symbol: string): SpotKoreaItem | null {
   }
 }
 
+/**
+ * 港股指数快照。
+ *
+ * ⚠️ 下标与 A 股 / 韩股**都不一样**，别套用：
+ *   [1]中文名 [2]今开 [3]昨收 [4]最高 [5]最低 [6]现价 [7]涨跌额 [8]涨跌幅% [18]时间
+ * 特别容易踩的是 **[2] 是今开不是昨收**（与腾讯分时首点 09:30 的价格一致）。
+ * 这里现价与涨跌幅都自己算，不直接读 [8]，保持与 A50 / 韩股同一个口径。
+ */
+function buildHk(quotes: QuoteMap): SpotHkItem | null {
+  const f = quotes.get(HK_RT_SYMBOL) ?? quotes.get(HK_SYMBOL)
+  if (!f) return null
+  const last = toNum(f[6])
+  const prev = toNum(f[3])
+  return {
+    name: f[1]?.trim() || '恒生科技指数',
+    price: last === null ? null : round(last, 2),
+    chg_pct: chgPct(last, prev),
+    time: pickClock(f[18]),
+  }
+}
+
 /* ------------------------------ 迷你日内走势（sparkline） ------------------------------ */
 
 /** 等距抽稀到 ≤ max 点，保留首尾。 */
@@ -393,22 +446,91 @@ async function fetchKoreaSpark(symbol: string, errors: string[]): Promise<SparkS
   return toSpark(pts, base)
 }
 
+/** 腾讯分时解析结果：点位 + 腾讯自带的昨收（`qt[code][4]`，仅作兜底）。 */
+interface MinPoints {
+  points: { t: string; v: number }[]
+  base: number | null
+}
+
+/**
+ * 腾讯分时解析。`data[code].data.data` 是 `"HHMM 价 量 额"` 字符串数组；
+ * 昨收在 `data[code].qt[code][4]`（同一份响应里，不用另发一次请求）。
+ *
+ * 注意它返回的是**普通 JSON**（不是 JSONP），所以直接 `res.json()`。
+ */
+async function fetchTencentMinPoints(
+  code: string,
+  label: string,
+  errors: string[],
+): Promise<MinPoints | null> {
+  let json: unknown
+  try {
+    const res = await fetch(tencentMinUrl(code), {
+      headers: SINA_HEADERS,
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+    })
+    if (!res.ok) {
+      errors.push(`${label} 分时返回 HTTP ${res.status}`)
+      return null
+    }
+    json = await res.json()
+  } catch (err) {
+    errors.push(`${label} 分时抓取失败：${err instanceof Error ? err.message : String(err)}`)
+    return null
+  }
+
+  try {
+    const root = json as { data?: Record<string, unknown> } | null
+    const node = root?.data?.[code] as
+      | { data?: { data?: unknown }; qt?: Record<string, unknown> }
+      | undefined
+    const rows = Array.isArray(node?.data?.data) ? (node.data.data as unknown[]) : []
+
+    const points: { t: string; v: number }[] = []
+    for (const row of rows) {
+      if (typeof row !== 'string') continue
+      const parts = row.trim().split(/\s+/)
+      const hhmm = parts[0] ?? ''
+      if (!/^\d{4}$/.test(hhmm)) continue
+      const v = toNum(parts[1])
+      if (v === null) continue
+      points.push({ t: `${hhmm.slice(0, 2)}:${hhmm.slice(2, 4)}`, v })
+    }
+
+    // 昨收：qt[code] 的 [4]（与港股报价的 [3] 是同一个值，来源不同）
+    const qt = node?.qt?.[code]
+    const base = Array.isArray(qt) ? toNum(qt[4] as string | undefined) : null
+
+    return points.length > 0 ? { points, base } : null
+  } catch (err) {
+    errors.push(`${label} 分时解析失败：${err instanceof Error ? err.message : String(err)}`)
+    return null
+  }
+}
+
 async function buildSpot(): Promise<SpotPayload> {
   const { minutes, ts } = beijingNow()
   const errors: string[] = []
 
-  // 行情与四条分时并行抓，互不阻塞
-  const [quotes, sparkA50, sparkNq, sparkKospi, sparkKosdaq] = await Promise.all([
+  // 行情与五条分时并行抓，互不阻塞
+  const [quotes, sparkA50, sparkNq, sparkKospi, sparkKosdaq, hkPoints] = await Promise.all([
     fetchQuotes(errors),
     fetchFuturesSpark('CHA50CFD', 'A50', errors),
     fetchFuturesSpark('NQ', 'NQ', errors),
     fetchKoreaSpark('KOSPI', errors),
     fetchKoreaSpark('KOSDAQ', errors),
+    fetchTencentMinPoints(HK_SYMBOL, '恒生科技', errors),
   ])
 
   const kospi = buildKorea(quotes, 'b_KOSPI')
   const kosdaq = buildKorea(quotes, 'b_KOSDAQ')
   const cn = buildCn(quotes)
+
+  // 迷你图的基准优先用**新浪报价的昨收**（[3]），这样卡片上的涨跌幅与分时的红绿方向
+  // 一定一致；新浪没取到时才退到腾讯自带的昨收。腾讯的 [2] 是今开，不能用。
+  const hkQuote = quotes.get(HK_RT_SYMBOL) ?? quotes.get(HK_SYMBOL)
+  const hkPrev = hkQuote ? toNum(hkQuote[3]) : null
+  const sparkHstech = hkPoints ? toSpark(hkPoints.points, hkPrev ?? hkPoints.base) : null
 
   return {
     ts,
@@ -418,7 +540,8 @@ async function buildSpot(): Promise<SpotPayload> {
     nq: buildFuture(quotes, NQ_SYMBOL),
     // kosdaq 保留在 payload 里（前端暂不渲染），想恢复只改 LiveStrip 一行
     korea: kospi || kosdaq ? { kospi, kosdaq } : null,
-    spark: { a50: sparkA50, nq: sparkNq, kospi: sparkKospi, kosdaq: sparkKosdaq },
+    hstech: buildHk(quotes),
+    spark: { a50: sparkA50, nq: sparkNq, kospi: sparkKospi, kosdaq: sparkKosdaq, hstech: sparkHstech },
     errors,
   }
 }
@@ -715,7 +838,8 @@ function failurePayload(message: string): SpotPayload {
     a50: null,
     nq: null,
     korea: null,
-    spark: { a50: null, nq: null, kospi: null, kosdaq: null },
+    hstech: null,
+    spark: { a50: null, nq: null, kospi: null, kosdaq: null, hstech: null },
     errors: [message],
   }
 }
