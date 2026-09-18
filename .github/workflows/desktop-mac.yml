@@ -1,8 +1,9 @@
 # 桌面版（macOS dmg）自动构建
 #
 # 触发：
-#   - push 到 main 且改动涉及 market-dashboard/** → 构建 dmg 并上传为 workflow artifact
-#   - push tag v* → 同样构建，并把 dmg 附加到 GitHub Release（用户从这里下载）
+#   - push 到 main 且改动涉及 market-dashboard/** → 构建 dmg 上传 artifact，
+#     并覆盖更新一个固定的「桌面版最新构建」预发布（用户直接从这个链接下载，免登录）
+#   - push tag v* → 同样构建，并额外发一个正式 Release
 #
 # 说明：历史数据 data.json 随仓库提交（构建时直接打进包里作为基线），
 # App 启动后会自动从 jsdelivr/raw 拉最新数据覆盖本地缓存，所以 CI 不需要跑数据管线。
@@ -16,6 +17,10 @@ on:
       - '.github/workflows/desktop-mac.yml'
     tags: ['v*']
   workflow_dispatch:
+
+# softprops/action-gh-release 需要写权限
+permissions:
+  contents: write
 
 jobs:
   build-mac:
@@ -48,7 +53,26 @@ jobs:
           path: market-dashboard/release/*.dmg
           if-no-files-found: error
 
-      - name: Attach dmg to GitHub Release (tag pushes only)
+      # 固定 tag 的滚动预发布：每次 push 到 main 覆盖更新同一份下载页，
+      # 用户链接永久有效且无需登录：
+      #   https://github.com/HiCooper/thinking-ss/releases/download/desktop-latest/MarketDashboard-0.1.0.dmg
+      - name: Publish rolling pre-release (main pushes)
+        if: github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: desktop-latest
+          name: 桌面版 · 最新构建
+          prerelease: true
+          body: |
+            由 CI 自动构建，每次 push 到 main 覆盖更新（未公证签名，首次打开需「右键 → 打开」）。
+
+            - **Apple Silicon**（M 系列）下载 `MarketDashboard-0.1.0-arm64.dmg`
+            - **Intel** Mac 下载 `MarketDashboard-0.1.0.dmg`
+
+            持仓数据不在包内：首次打开后通过「导入持仓」选择本地文件即可（数据只存在本机）。
+          files: market-dashboard/release/*.dmg
+
+      - name: Publish versioned release (tag pushes only)
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
