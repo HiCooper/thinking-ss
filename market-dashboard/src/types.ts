@@ -169,3 +169,4 @@ export interface SpotData {
   spark: SpotSpark
   errors: string[]
 }
+

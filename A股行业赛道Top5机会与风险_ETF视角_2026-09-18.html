@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>A股行业赛道 Top5 机会 × Top5 风险（ETF 视角）</title>
+<script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+<style>
+:root{
+  --bg:#f4f7f6; --text:#1a1a2e; --text-muted:#6b7280; --border:#d8e2de;
+  --accent:#0f766e; --star:#EF9F27;
+  --up-bg:#EEF3FA; --up-bd:#B5D4F4;
+  --mid-bg:#FAF0EC; --mid-bd:#F0997B;
+  --down-bg:#E5F7F0; --down-bd:#5DCAA5;
+  --up:#c0392b; --dn:#1e8449;
+}
+*{box-sizing:border-box;}
+body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;font-size:15px;line-height:1.7;margin:0;padding:28px 18px 60px;}
+.wrap{max-width:900px;margin:0 auto;}
+h1{font-size:26px;font-weight:600;margin:0 0 6px;color:var(--accent);}
+.subtitle{color:var(--text-muted);font-size:13px;margin:0 0 20px;}
+h2{font-size:20px;font-weight:600;border-bottom:2px solid var(--accent);padding-bottom:6px;margin:38px 0 14px;}
+h3{font-size:16px;font-weight:600;color:var(--accent);margin:20px 0 8px;}
+h4{font-size:14px;font-weight:600;margin:14px 0 6px;}
+p{margin:8px 0;}
+.note{background:#fff9e6;border-left:4px solid var(--star);border-radius:6px;padding:14px 16px;margin:16px 0;}
+.note.plain{background:#fff;border-left:4px solid var(--accent);}
+.note.warn{background:#fdeeee;border-left:4px solid #c0392b;}
+.card{background:#fff;border:1px solid var(--border);border-radius:8px;padding:14px 16px;margin:12px 0;}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin:14px 0;}
+.kpi{background:#fff;border:1px solid var(--border);border-radius:8px;padding:10px 12px;}
+.kpi .k{font-size:12px;color:var(--text-muted);}
+.kpi .v{font-size:19px;font-weight:600;margin-top:2px;}
+.kpi .s{font-size:11px;color:var(--text-muted);margin-top:2px;}
+.up{color:var(--up);} .dn{color:var(--dn);} .flat{color:var(--text-muted);}
+table{width:100%;border-collapse:collapse;margin:12px 0;font-size:13px;background:#fff;}
+th,td{border:1px solid var(--border);padding:6px 8px;text-align:left;vertical-align:top;}
+th{background:#eef3f2;font-weight:600;}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;}
+.layer{border-radius:8px;padding:12px 14px;margin:10px 0;}
+.layer.up{background:var(--up-bg);border:1px solid var(--up-bd);}
+.layer.mid{background:var(--mid-bg);border:1px solid var(--mid-bd);}
+.layer.down{background:var(--down-bg);border:1px solid var(--down-bd);}
+.layer .lt{font-weight:600;font-size:14px;margin-bottom:6px;}
+.theme{background:#fff;border:1px solid var(--border);border-left:4px solid var(--accent);border-radius:8px;padding:14px 16px;margin:14px 0;}
+.theme.risk{border-left-color:#c0392b;}
+.theme-head{display:flex;flex-wrap:wrap;align-items:baseline;gap:8px;margin-bottom:6px;}
+.theme-rank{background:var(--accent);color:#fff;border-radius:4px;font-size:12px;padding:1px 7px;font-weight:600;}
+.theme.risk .theme-rank{background:#c0392b;}
+.theme-name{font-size:17px;font-weight:600;}
+.tag{font-size:11px;border:1px solid var(--border);border-radius:10px;padding:1px 8px;color:var(--text-muted);background:#fafafa;}
+.tag.a{border-color:#EF9F27;color:#a8720b;}
+.tag.c{border-color:#c0392b;color:#c0392b;}
+.rowline{font-size:13px;margin:5px 0;}
+.rowline b{color:var(--accent);}
+.theme.risk .rowline b{color:#c0392b;}
+.etf{font-size:12px;background:#f4f7f6;border:1px dashed var(--border);border-radius:6px;padding:6px 9px;margin-top:8px;}
+.etf span{white-space:nowrap;margin-right:10px;display:inline-block;}
+code{background:#eef3f2;border-radius:3px;padding:0 4px;font-size:12px;}
+.chartbox{background:#fff;border:1px solid var(--border);border-radius:8px;padding:10px 6px 4px;margin:14px 0;}
+.cap{font-size:12px;color:var(--text-muted);padding:0 10px 8px;}
+svg{display:block;width:100%;height:auto;}
+.small{font-size:12px;color:var(--text-muted);}
+ul{margin:6px 0 6px 18px;padding:0;}
+li{margin:3px 0;}
+@media (max-width:640px){
+  body{padding:16px 10px 40px;font-size:14px;}
+  h1{font-size:21px;} h2{font-size:17px;}
+  table{font-size:12px;} th,td{padding:4px 5px;}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>A 股行业赛道 Top5 机会 × Top5 风险</h1>
+<p class="subtitle">ETF 投资者视角 ｜ 数据截止 2026-09-18 收盘（部分宏观/资金为 09-17 EOD）<br>
+数据来源：腾讯自选股结构化接口（westock）、新浪/东财行情（akshare-data）、财联社快讯、公开财经媒体（非一手，需核实原文）</p>
+
+<div class="note">
+<strong>核心发现：</strong>9-18 是一根<strong>放量普涨的反弹阳线，但环境判定仍是「空头」</strong>——沪深300 收 4507.39，低于 MA20（4548.67）与 MA60（4654.84），且 MA20 斜率向下；全 A 股 PE 20.10 处在 10 年 76.9% 分位。<br><br>
+所以本报告的定位不是「找最强的涨」，而是<strong>在空头环境里筛出「产业逻辑≥B 且位置不极端」的赛道</strong>，并把「逻辑硬但位置极端」的品种单独标出来警告。<br><br>
+<strong>结论一句话：</strong>进攻端看<span class="up">半导体设备与材料</span>、<span class="up">光通信/CPO</span>；中期趋势看<span class="up">创新药（港股通）</span>；对冲与底仓看<span class="up">黄金/贵金属</span>、<span class="up">红利/银行</span>。需要警惕的是<span class="dn">次新股与微盘情绪</span>、<span class="dn">电池/锂电</span>、<span class="dn">光伏设备</span>、<span class="dn">航空航天/军工</span>、<span class="dn">港股互联网</span>。
+</div>
+
+<h2>一、先看环境：今天不是拐点，是空头趋势里的放量反弹</h2>
+
+<div class="grid">
+  <div class="kpi"><div class="k">沪深300（ARK 三态）</div><div class="v up">4507.39 <span style="font-size:13px">+1.06%</span></div><div class="s">收盘 &lt; MA20 4548.67 &lt; MA60 4654.84 → <b>空头</b></div></div>
+  <div class="kpi"><div class="k">两市成交额</div><div class="v up">20,771 亿</div><div class="s">较前日 +2,540 亿，重回 2 万亿</div></div>
+  <div class="kpi"><div class="k">涨跌家数</div><div class="v up">4234 / 1152</div><div class="s">涨停 80 家 · 跌停 1 家</div></div>
+  <div class="kpi"><div class="k">两融余额（09-17）</div><div class="v">26,391 亿</div><div class="s">5日 -72.4 亿 ｜ 20日 -272.3 亿</div></div>
+  <div class="kpi"><div class="k">全 A 股 PE(TTM)</div><div class="v">20.10</div><div class="s">10年分位 76.9% ｜ 5年分位 78.3%</div></div>
+  <div class="kpi"><div class="k">10Y 美债 / 中债</div><div class="v">4.934% / 1.690%</div><div class="s">美债日 -8.2bp，仍在 5% 附近</div></div>
+  <div class="kpi"><div class="k">20日新高 / 新低（09-17）</div><div class="v">277 / 613</div><div class="s">净宽度 -336，弱</div></div>
+  <div class="kpi"><div class="k">美元指数 / USDCNY</div><div class="v">100.36 / 6.6996</div><div class="s">人民币升破 6.7，不构成额外压力</div></div>
+</div>
+
+<div class="card">
+<h4>为什么「涨了 2.08 万亿」还不能算环境转多</h4>
+<ul>
+<li><strong>价格结构没修复。</strong>沪深300 今天涨 1.06%，但离 MA20 还差 0.91%，MA20 本身在下行——今天只是把 9-17 的失地收回来一小部分，均线空头排列未破。</li>
+<li><strong>杠杆资金还在撤。</strong>两融 20 日 -272.3 亿（-1.02%），连续第 4 周下降；融资余额 26,099 亿仍在近 1 个月低位。放量是 ETF/长线资金与短线博弈造成的，不是杠杆回补。</li>
+<li><strong>估值不便宜。</strong>全 A 股 PE 10 年分位 76.9%，属于「偏高区间」。这个位置上的反弹，是结构性机会而非全面做多的起点。</li>
+<li><strong>好消息是外部压力在减弱。</strong>美联储 9-17 加息 25bp 落地（3.75%–4.00%，2023 年 7 月以来首次），点阵图偏鹰但被市场当作「靴子落地」；10Y 美债从 5.00% 回落到 4.934%；人民币升破 6.7；WTI 从 104 回到 96.4。这三条同时转向，是本轮反弹的真实燃料。</li>
+</ul>
+</div>
+
+<div class="note plain">
+<strong>本报告对「空头环境」的操作含义：</strong>趋势型系统（环境识别 → 行业打分 → 信号共振 → 仓位止损）在空头环境下不该满仓进攻。下面的 Top5 中，我把每一项都标了<strong>角色</strong>（主攻 / 中期 / 对冲 / 底仓）与<strong>位置评级</strong>——「逻辑硬」与「现在是好买点」是两件事，混在一起是这个阶段最容易犯的错。
+</div>
+
+<h2>二、信号漏斗：从全市场异动到赛道定位</h2>
+
+<p>按「涨价 / 扩产 / 认证 / 政策 / 财报 / 资金筹码」六类信号扫描 09-14 至 09-18 的市场，能聚到同一个环节上的信号如下（≥4 类信号共振 = A 级）：</p>
+
+<table>
+<tr><th>环节 / 赛道</th><th>触发的信号类型</th><th class="num">信号数</th><th>共振等级</th><th>关键证据（时间）</th></tr>
+<tr><td><b>半导体设备与材料</b></td><td>涨价 + 供给冲击 + 政策 + 资金 + 海外映射</td><td class="num">5</td><td><b>S 级</b></td><td>信越/日东光刻胶 10-01 起全球提价 15%（散单 32%–38%）；韩国半导体设备零部件交期延长一倍以上；美光称内存新增供应 2028 才爬坡；ASML 研报称 2028 年 EUV 产能 110 台+（09-17）；黄仁勋称 2027 年芯片销量约为今年两倍（09-17）</td></tr>
+<tr><td><b>光通信 / CPO</b></td><td>技术迭代 + 政策 + 资金</td><td class="num">4</td><td><b>A 级</b></td><td>华为全联接大会（09-17）发布首款量产 NPO 光电共封装昇腾 960 超节点，提前三个季度；液冷服务器单柜散热突破 1MW；行业 20 日主力净流入 +51.9 亿（唯一 20 日持续正流入的成长方向）</td></tr>
+<tr><td><b>创新药</b></td><td>政策 + 产业数据 + 认证</td><td class="num">4</td><td><b>A 级</b></td><td>十部门《医药工业发展"十五五"规划》（09-18）：2030 年规上医药工业营收 &gt;3.5 万亿、创新药产业规模年均增速 &gt;20%、FIC 占全球 &gt;25%；2026 年已批准创新药 59 个（13 个新机制/新靶点）；1–8 月 BD 交易 113 起、总额 1,199.97 亿美元</td></tr>
+<tr><td><b>黄金 / 贵金属</b></td><td>地缘 + 价格突破 + 政策</td><td class="num">3</td><td><b>B 级</b></td><td>高盛维持 2027 年底 5,400 美元/盎司（09-18，尽管加息）；现货金 09-18 +1% 报 4,386.01，现货银 09-17 +2.5% 报 64.65；沙特东西输油管道遇袭后 WTI 一度冲破 104</td></tr>
+<tr><td><b>红利 / 大金融</b></td><td>资金筹码 + 财报</td><td class="num">3</td><td><b>B 级</b></td><td>社保/年金/险资年内净买入 A 股超 6,000 亿（证监会 09-10）；保险权益配置比例 16.23%，连续 8 个季度提升；42 家上市银行中 32 家营收净利双增、17 家净息差同比回升（四年首次）；上市券商密集"注销式回购"</td></tr>
+</table>
+
+<p class="small">说明：信号数量是研究员的定性聚类（非机器统计），等级用于排序，不是可回测的量化指标。</p>
+
+<h2>三、值得关注的 Top5</h2>
+
+<div class="theme">
+<div class="theme-head"><span class="theme-rank">1</span><span class="theme-name">半导体设备与材料（含电子化学品）</span><span class="tag">主攻</span><span class="tag a">逻辑 A 级 · 位置 C 级</span></div>
+<div class="rowline"><b>产业逻辑｜</b>AI 算力扩张把压力传导到「前道量测、光刻胶、电子特气、大硅片」这些国产化率最低的环节。海外已经开始涨价与拉长交期：信越/日东光刻胶 10 月 1 日起全球提价 15%、散单 32%–38%；韩国设备零部件交期延长一倍以上；美光明确内存新增供应要到 2028 年才爬坡。这不是需求脉冲，是供给端被长期低估后的再定价。</div>
+<div class="rowline"><b>供给约束（瓶颈在哪）｜</b>光刻胶/电子特气/大硅片属<strong>消耗性材料</strong>，每片晶圆必用、认证周期 12–24 个月、断供需重新验证——符合「供给弹性差」的瓶颈特征。<em>通俗类比：光刻胶之于晶圆厂，等于照相的底片之于相机——换一个品牌不是换零件，是重新调整个工艺流程。</em>设备端的量测/探针台则受 HBM 与先进封装推动，复杂度上升带动单台价值量抬升。</div>
+<div class="rowline"><b>估值位置｜</b>半导体（申万二级）PE 78.54（<b>84.5% 分位</b>）、PB 9.55（<b>97.7% 分位</b>）、PS 14.34（<b>97.7% 分位</b>）；上级行业电子 PE 66.50（80.0% 分位）、PB 7.20（94.5% 分位）。<span class="tag c">这是全市场估值分位最高的成长板块之一</span></div>
+<div class="rowline"><b>资金｜</b>行业口径主力净流入：09-16 +136.5 亿、09-18 +187.5 亿（两日合计约 318 亿，媒体口径需核实）；5 日 +243.8 亿；但 <b>20 日仍为 -422.7 亿</b>——说明这轮是「跌倒后的资金回流」，不是持续加仓。电子化学品 5 日 +48.1 亿同步共振。</div>
+<div class="rowline"><b>价格位置｜</b>半导体设备ETF国泰 5 日 <span class="up">+11.79%</span>、20 日 +0.14%、60 日 <span class="dn">-17.14%</span>；科创半导体ETF华夏 5 日 <span class="up">+13.97%</span>、60 日 <span class="dn">-15.28%</span>；半导体ETF国联安 60 日 <span class="dn">-24.24%</span>。<b>即：短期最猛，中期仍在深坑。</b></div>
+<div class="rowline"><b>红队证伪｜</b>①PB/PS 双双 97%+ 分位，「逻辑正确」不等于「估值安全」；②两日 318 亿的流入速度本身就是拥挤度信号，半导体板块已有研究报告明确提示"不少个股逼近前期筹码密集区，面临套牢盘抛压"；③今日寒武纪午后跳水，说明板块内部已开始分化；④2028 年若全球集中扩产落地，材料端的涨价逻辑可能反转；⑤日韩涨价传导到 A 股公司报表需要 2–3 个季度，三季报前是"预期差"而非"业绩兑现"。</div>
+<div class="etf"><b>ETF 映射</b>（按 09-18 成交额排序）<br>
+<span>159516 半导体设备ETF国泰 · 38.5亿 / 447亿</span>
+<span>588170 科创半导体ETF华夏 · 70.2亿 / 436亿</span>
+<span>588710 科创半导体设备ETF华泰柏瑞 · 17.3亿 / 116亿</span>
+<span>589020 科创半导体设备ETF鹏华 · 10.4亿 / 53亿</span>
+<span>512480 半导体ETF国联安 · 15.5亿 / 207亿</span>
+<span>588200 科创芯片ETF嘉实 · 32.0亿 / 508亿</span>
+<span class="small">（格式：代码 名称 · 当日成交额 / 流通规模）</span></div>
+<div class="note warn" style="margin-bottom:0"><b>入场纪律（重要）：</b>这是「逻辑 A、位置 C」的组合。<strong>不要在两根大阳线之后追</strong>。合理的做法是等它回踩 5 日线/前一日跳空缺口，或等 09-16 那根阳线的起点被回测不破再介入。60 日 -17% 说明趋势还没修复，追高的容错率很低。</div>
+</div>
+
+<div class="theme">
+<div class="theme-head"><span class="theme-rank">2</span><span class="theme-name">光通信 / CPO（通信设备）</span><span class="tag">主攻</span><span class="tag a">逻辑 A 级 · 位置 B 级</span></div>
+<div class="rowline"><b>产业逻辑｜</b>智算集群的瓶颈正从"芯片间互联"外溢到"机柜间互联"。华为 09-17 发布首款搭载量产 NPO（近封装光学）光电共封装技术的昇腾 960 超节点，比市场预期提前三个季度；光博会共识是"能铜则铜、必须用光再用光"。液冷服务器单柜散热已突破 1MW——散热与互联同时逼近物理极限，这两件事都指向光器件升级。</div>
+<div class="rowline"><b>供给约束｜</b>200G/lane EML 光芯片、硅光与 CPO 的良率与产能爬坡是硬约束，扩产周期 12–18 个月。<em>通俗类比：光模块升级像把城市道路从双向四车道拓到双向十二车道，路（光纤）还是那条，但每个路口的红绿灯（光芯片/封装）必须全部换新的。</em></div>
+<div class="rowline"><b>估值位置｜</b>通信设备 PE 71.00（81.9% 分位）、PB 9.09（<b>97.3% 分位</b>）、PS 6.82（89.0% 分位）——环节口径贵。<b>但</b>上级行业通信 PE 32.51（<b>49.9% 分位</b>）、PB 2.90（54.1% 分位），因为一级行业含运营商，把估值拉回中性。<span class="tag">口径差异必须说清</span></div>
+<div class="rowline"><b>资金｜</b>通信设备 5 日 +49.8 亿、<b>20 日 +51.9 亿 —— 是所有高弹性成长方向里唯一 20 日持续净流入的</b>。这一点很关键：它比半导体"先于大盘企稳"。</div>
+<div class="rowline"><b>价格位置｜</b>通信ETF国泰 5 日 <span class="up">+4.30%</span>、<b>20 日 <span class="up">+3.99%</span></b>、60 日 <span class="dn">-19.91%</span>；通信ETF华夏 20 日 <span class="up">+1.90%</span>。在半导体链 20 日大体在 0% 附近的情况下，通信是唯一 20 日明显为正的科技方向。</div>
+<div class="rowline"><b>红队证伪｜</b>①PB 97.3% 分位，环节估值风险与半导体同级；②今日出现"CPO 鬼故事"——千亿市值电子布龙头闪崩，覆铜板 -1.28%、电子布 -0.65%，说明产业链内部的"故事定价"已经非常敏感，任何传闻都能引发踩踏；③如果海外云厂商资本开支减速（这是 9 月中旬那波杀跌的原始导火索），光模块是<strong>最直接</strong>的受损环节，而不是最受益环节；④光模块龙头过去两年累计涨幅巨大，持仓结构拥挤，一旦转向，出清时间会比半导体更长。</div>
+<div class="etf"><b>ETF 映射</b><br>
+<span>515880 通信ETF国泰 · 44.0亿 / 445亿</span>
+<span>515050 通信ETF华夏 · 11.9亿 / 192亿</span>
+<span>159583 通信ETF富国 · 6.1亿 / 50亿</span>
+<span class="small">（格式：代码 名称 · 当日成交额 / 流通规模）</span></div>
+</div>
+
+<div class="theme">
+<div class="theme-head"><span class="theme-rank">3</span><span class="theme-name">创新药（港股通创新药为主）</span><span class="tag">中期持有</span><span class="tag a">逻辑 A 级 · 位置 B 级</span></div>
+<div class="rowline"><b>产业逻辑｜</b>09-18 十部门联合发布《医药工业发展"十五五"规划》，给出到 2030 年的硬指标：规上医药工业营收 &gt;3.5 万亿、创新药产业规模年均增速 &gt;20%、FIC 占全球比例 &gt;25%、创新器械累计上市 &gt;200 个。产业侧数据同步在验证：2026 年以来已批准创新药 59 个（其中 13 个为新机制/新靶点），1–8 月生物医药 BD 交易 113 起、总额 1,199.97 亿美元——<strong>License-out 已经开始产生真实现金流</strong>，这是 2024 年之前没有的质变。</div>
+<div class="rowline"><b>这条链的"瓶颈"是什么｜</b>它不适用产能瓶颈框架，代理变量是<strong>临床数据与专利</strong>：一款药从临床 III 期到上市，竞争对手无法在 12–18 个月内复制。真正的稀缺资源是"能出海、能被跨国药企付费买授权"的管线，而不是研发人员数量。<em>通俗类比：这一轮的创新药不是"卖药"，是"卖专利授权"——像作家卖影视改编权，一次签约就是一笔现金。</em></div>
+<div class="rowline"><b>估值位置｜</b>医药生物（一级）PE 43.69（<b>64.0% 分位</b>）、PB 2.73（49.8% 分位）、PS 2.61（55.9% 分位）——<b>中性，这是 Top5 里唯一估值不极端的成长方向</b>。内部严重分化：化学制药 PE 52.34（71.6% 分位）尚可；生物制品 PE 246.38（97.3% 分位）偏高。</div>
+<div class="rowline"><b>资金｜</b><span class="tag c">这里必须说实话：资金面是分裂的</span> 医疗服务 5 日 +41.6 亿（20 日 +3.2 亿，在加速）；但化学制药 20 日 -123.5 亿、生物制品 20 日 -332.5 亿。也就是说钱在往 <strong>CXO/医疗服务</strong> 和 <strong>港股创新药</strong> 走，而不是往 A 股传统制药走。买 ETF 必须选对标的。</div>
+<div class="rowline"><b>价格位置｜</b>港股创新药ETF广发 5 日 <span class="up">+5.21%</span>、20 日 <span class="dn">-2.78%</span>、60 日 <span class="up">+28.02%</span>（<b>全表 60 日最强</b>）；医疗ETF华宝 60 日 <span class="up">+14.86%</span>；中药ETF 60 日 <span class="up">+10.71%</span>；创新药ETF银华 60 日 <span class="up">+10.89%</span>。</div>
+<div class="rowline"><b>红队证伪｜</b>①"规划"不是"订单"——3.5 万亿是 2030 年规上医药工业<strong>营业收入</strong>目标，不等于创新药市场规模，更不等于某家公司的收入；"年均增速 &gt;20%"是规划设定值，不是预测值；②港股创新药 20 日已转负（-2.78%），说明 60 日的强势正在被消化，不是加速期；③医保控费与集采的长期压制没有解除；④港股创新药受汇率与外资流向双重扰动，人民币若重新走弱会放大波动。</div>
+<div class="etf"><b>ETF 映射</b><br>
+<span>513120 港股创新药ETF广发 · 69.8亿 / 228亿</span>
+<span>159992 创新药ETF银华 · 7.3亿 / 163亿</span>
+<span>520880 港股通创新药ETF华宝 · 3.5亿</span>
+<span>512170 医疗ETF华宝</span>
+<span class="small">（格式：代码 名称 · 当日成交额 / 流通规模）</span></div>
+</div>
+
+<div class="theme">
+<div class="theme-head"><span class="theme-rank">4</span><span class="theme-name">黄金 / 贵金属</span><span class="tag">对冲</span><span class="tag a">逻辑 B+ 级 · 位置 B 级</span></div>
+<div class="rowline"><b>产业逻辑｜</b>高盛 09-18 明确"尽管美联储加息，仍维持 2027 年底 5,400 美元/盎司"。上行驱动有三条：<strong>①央行与主权部门持续购金</strong>（俄罗斯外储升至 7,582 亿美元；委内瑞拉约 40 亿美元黄金储备拟从英格兰银行转至纽约联储）；<strong>②实际利率见顶预期</strong>——10Y 美债从 5.00% 回落到 4.934%（日 -8.2bp），若加息周期接近尾声，实际利率的下行直接利好金价；<strong>③地缘溢价未消</strong>——沙特东西输油管道遇袭后修复"或需数月"，霍尔木兹海峡风险仍在。</div>
+<div class="rowline"><b>为什么配它｜</b>它是这份清单里与 A 股风险资产相关性最低的品种。在沪深300 处于空头（4507 &lt; MA20 4549 &lt; MA60 4655）、全 A 估值 10 年 76.9% 分位的环境下，组合里有一个不依赖 A 股 β 的腿，是性价比最高的风险预算。</div>
+<div class="rowline"><b>估值位置｜</b>贵金属 PE 23.42（<b>35.0% 分位</b>）、PS 1.31（25.4% 分位）不高；PB 4.43（80.3% 分位）偏高——说明矿业公司账面净资产已被金价重估，但盈利（PE）尚未充分反映。</div>
+<div class="rowline"><b>价格位置｜</b>黄金ETF华安 5 日 <span class="up">+0.75%</span>、20 日 <span class="dn">-4.03%</span>、60 日 <span class="up">+7.39%</span>；黄金股ETF永赢 60 日 <span class="up">+30.75%</span>（弹性更大，波动也更大）。现货金 09-18 日内 +1% 报 4,386.01；现货银 09-17 +2.5% 报 64.65。</div>
+<div class="rowline"><b>红队证伪｜</b>①<strong>最硬的反驳在利率</strong>：美联储点阵图偏鹰、暗示年内可能还有一次加息，若 10 月真的再加，实际利率上行会直接压制金价；②摩根大通 09-18 报告认为比特币的上涨空间已大于黄金（理由是比特币 ETF 资金回流更少、空头头寸接近年内高点，存在挤压空间），这对黄金是相对资金的分流；③20 日 -4.03% 说明它已经在调整中，不是刚启动；④贵金属行业 20 日主力净流出 -76.1 亿，A 股相关标的是"跟着金价走"而非"领先金价"，博弈成分不低。</div>
+<div class="etf"><b>ETF 映射</b><br>
+<span>518880 黄金ETF华安 · 53.9亿 / 1081亿（T+0）</span>
+<span>159934 黄金ETF易方达 · 9.7亿 / 378亿</span>
+<span>517520 黄金股ETF永赢 · 8.2亿 / 143亿（股票型，弹性大）</span>
+<span class="small">（格式：代码 名称 · 当日成交额 / 流通规模）</span></div>
+</div>
+
+<div class="theme">
+<div class="theme-head"><span class="theme-rank">5</span><span class="theme-name">红利 / 银行（防守底仓）</span><span class="tag">底仓</span><span class="tag a">逻辑 B 级 · 位置 A- 级</span></div>
+<div class="rowline"><b>产业逻辑｜</b>这是一条"类债券"逻辑，对手盘是 10Y 中债 1.690%。国有大型银行 <b>PB 0.755（1.69% 分位）、PE 8.07（13.8% 分位）、股息率 3.71%（95.2% 分位）</b>——即"估值处在历史最低区间，同时分红回报处在历史最高区间"。基本面也在配合：42 家上市银行中 32 家营收净利双增，<strong>17 家净息差同比回升，为四年来首次</strong>。资金侧，证监会披露社保/年金/保险年内净买入 A 股超 6,000 亿，保险资金权益配置比例 16.23% 连升 8 个季度创新高。</div>
+<div class="rowline"><b>为什么是现在｜</b>它的 60 日趋势是全表最健康的（银行ETF <span class="up">+12.60%</span>、红利ETF <span class="up">+13.07%</span>），而<strong>近 5 日刚好在被抽血</strong>（银行ETF -0.83%、红利ETF -2.31%、煤炭ETF -3.25%）。对底仓而言，"资金短期跑去进攻端"造成的回调，恰好是比追高时更好的介入窗口。</div>
+<div class="rowline"><b>红队证伪｜</b>①今日银行概念主力 -3.1 亿（5 日 -44.0 亿、20 日 -96.7 亿），国有大行 20 日 -32.6 亿——<strong>资金确实在离开这个方向</strong>，如果风格切换是持续性的，你会承受相对收益的持续跑输；②银行三季报的净息差改善依赖资产端定价，若 LPR 再下调会逆转；③"低估值"是这轮已经涨了 60 天的结果，不是新发现，预期差已被压缩；④城商行/股份行/国有大行分化明显（今日国有大行 -1.03% 领跌），一次买入等于同时押注三种不同的基本面。</div>
+<div class="etf"><b>ETF 映射</b><br>
+<span>512800 银行ETF华宝 · 7.0亿 / 98亿</span>
+<span>512890 红利低波ETF华泰柏瑞 · 5.3亿 / 309亿</span>
+<span>510880 红利ETF华泰柏瑞 · 4.2亿 / 189亿</span>
+<span>515220 煤炭ETF国泰 · 6.3亿 / 99亿（高股息但周期属性更强）</span>
+<span class="small">（格式：代码 名称 · 当日成交额 / 流通规模）</span></div>
+</div>
+
+<h2>四、需要警惕的 Top5</h2>
+
+<div class="theme risk">
+<div class="theme-head"><span class="theme-rank">1</span><span class="theme-name">次新股 / 微盘情绪炒作</span><span class="tag c">风险等级：高</span></div>
+<div class="rowline"><b>发生了什么｜</b>沈鼓集团（C沈鼓）上市第 2 日收 <span class="up">+177.74%</span>（盘中一度 +297%，半小时增加约 1,800 亿市值，总市值达 1,797 亿）；C信诺维 +34.46%（盘中 +90%）；腾信精密 +30%；锡华科技 4 连板。当日换手率前五：沈鼓 89.08%、信诺维 78.21%、腾信精密 67.27%。</div>
+<div class="rowline"><b>为什么警惕｜</b>这是市场情绪最极端、最脆弱的一环。9-18 全市场<strong>只有 1 只跌停</strong>、80 只涨停——"0 跌停"是典型的情绪顶部读数，历史上通常不会持续超过 3–5 个交易日。一旦情绪退潮，微盘与次新会最先失血，并拖累同源的高估值题材股。</div>
+<div class="rowline"><b>同源风险｜</b>同一套"叙事定价"逻辑下，出现了<strong>航天装备 PE 361 倍（98.35% 分位）</strong>、<strong>军工电子 PE 899 倍（99.39% 分位）</strong>这样的读数。它们和次新股共享同一个定价基础：故事，而不是现金流。</div>
+<div class="rowline"><b>对 ETF 投资者的实际含义｜</b>你不会买次新股，但要知道：<b>微盘/次新是当前市场的"情绪杠杆"</b>。当它退潮时，会通过风险偏好传导打击中小盘 ETF（中证1000、中证2000 类）。不要在情绪最热的这天加仓小盘。</div>
+</div>
+
+<div class="theme risk">
+<div class="theme-head"><span class="theme-rank">2</span><span class="theme-name">电池 / 锂电材料</span><span class="tag c">风险等级：中高</span></div>
+<div class="rowline"><b>证据（这是最硬的一条）｜</b>电池行业 <strong>20 日主力净流出 -218.3 亿，是全部申万二级行业里绝对值最大的</strong>；5 日继续 -57.1 亿。同期电力设备（一级）20 日也在净流出。价格端，碳酸锂价格"下探"（09-17 报道），宁德时代虽有动作，但中游材料的价格战没有结束。</div>
+<div class="rowline"><b>价格位置｜</b>电池ETF广发 5 日 <span class="up">+1.15%</span>、20 日 <span class="dn">-8.84%</span>、60 日 <span class="dn">-17.50%</span>；新能源ETF南方 20 日 <span class="dn">-8.01%</span>、60 日 <span class="dn">-19.35%</span>。<b>今天电池板块 +0.76%，是弱的反弹，不是强的反转。</b></div>
+<div class="rowline"><b>为什么不是"跌够了"｜</b>电池（申万二级）PE 23.64（35.4% 分位）、PB 2.96（55.6% 分位）——估值并不极端低。一个"估值中位 + 资金持续流出 + 产品价格下行"的组合，是典型的<strong>还没跌完</strong>的结构，而不是"跌无可跌"。</div>
+<div class="rowline"><b>要看到什么才算转机｜</b>碳酸锂现货价格连续 2 周止跌回稳，且电池行业 20 日主力净流出收窄到 -50 亿以内。在这两个条件出现之前，反弹都应视为卖出/减仓窗口而非买入窗口。</div>
+</div>
+
+<div class="theme risk">
+<div class="theme-head"><span class="theme-rank">3</span><span class="theme-name">光伏设备</span><span class="tag c">风险等级：中高</span></div>
+<div class="rowline"><b>基本面最差的一条链｜</b>光伏设备（申万二级）<strong>PE 为 -33.84（行业整体亏损）</strong>，PB 2.46（42.6% 分位）、PS 1.64（34.1% 分位）。60 日 <span class="dn">-24.12%</span>、年初至今 <span class="dn">-26.00%</span>、52 周 <span class="dn">-19.54%</span>——<strong>是所有行业里趋势最弱的一档</strong>。</div>
+<div class="rowline"><b>今天的上涨是什么｜</b>光伏设备 09-18 涨 <span class="up">+3.39%</span>，领涨股拉普拉斯 +11.26%，但驱动来自<strong>"太空光伏"概念（+3.93%）</strong>——这是一个概念板块，不是订单或价格信号。同日光伏设备的 5 日主力净流入只有 +11.9 亿，而 20 日仍是 <span class="dn">-94.1 亿</span>。</div>
+<div class="rowline"><b>结论｜</b>"亏损 + 趋势最弱 + 概念驱动反弹"三者叠加，是典型的<strong>反弹陷阱</strong>结构。行业真正的拐点信号是硅料/组件价格连续回升 + 供给侧实质性退出（产能停产公告），目前都没有看到。光伏ETF华泰柏瑞 60 日 -18.74% 已经说明了持仓者的体验。</div>
+</div>
+
+<div class="theme risk">
+<div class="theme-head"><span class="theme-rank">4</span><span class="theme-name">航空航天 / 军工</span><span class="tag c">风险等级：中高</span></div>
+<div class="rowline"><b>估值到了什么位置｜</b>航天装备 PE <b>361.26（98.35% 分位）</b>、PB 5.84（90.1% 分位）、PS 11.67（96.5% 分位）；军工电子 PE <b>899.73（99.39% 分位）</b>、PS 7.88（91.7% 分位）。<strong>这两个数字意味着：市场给这一块资产的定价，几乎完全建立在"未来会兑现"的假设上，而不是当期利润。</strong></div>
+<div class="rowline"><b>资金已经在走｜</b>航天装备 5 日 -3.5 亿、20 日 -22.5 亿；航空装备 5 日 <span class="dn">-37.6 亿</span>。20 日维度上，没有资金在支撑这个估值。</div>
+<div class="rowline"><b>趋势｜</b>航天装备 60 日 <span class="dn">-23.20%</span>、年初至今 <span class="dn">-33.09%</span>。航空航天ETF华夏 5 日 <span class="dn">-2.84%</span>、20 日 <span class="up">+4.48%</span>、60 日 <span class="dn">-6.13%</span>——<strong>20 日的正收益掩盖了它从更高位置一路下滑的事实。</strong></div>
+<div class="rowline"><b>为什么这条排进前四｜</b>因为它是"高估值 + 资金流出 + 无业绩支撑"三者同时成立，而且今天还在跟着成长风格一起涨（航天装备 +3.28%）。<strong>这意味着它现在的上涨是被风格带上去的，不是自己的产业逻辑推上去的——风格一停，它会跌得比谁都快。</strong></div>
+</div>
+
+<div class="theme risk">
+<div class="theme-head"><span class="theme-rank">5</span><span class="theme-name">港股互联网 / 恒生科技</span><span class="tag c">风险等级：中</span></div>
+<div class="rowline"><b>它的问题不是"贵"，是"弱得比预期久"｜</b>恒生科技指数 09-18 收 4,405.50（<span class="up">+2.20%</span>），恒指 24,750.78（+0.60%）。但看 ETF 的中期窗口：恒生科技ETF华泰柏瑞 5 日 <span class="up">+1.49%</span>、<strong>20 日 <span class="dn">-7.46%</span></strong>、60 日 <span class="up">+2.25%</span>；中概互联网ETF易方达 <strong>20 日 <span class="dn">-9.38%</span></strong>、港股通互联网ETF富国 20 日 <span class="dn">-8.63%</span>。</div>
+<div class="rowline"><b>关键读数｜</b>在所有 21 只被跟踪的 ETF 里，<strong>港股互联网家族是 20 日表现最差的一组</strong>（-7.5% ~ -9.4%），比 A 股半导体（20 日约 0%）和光伏（-4.3%）差得多。也就是说，过去一个月港股科技是<strong>抗跌性最差</strong>的资产，而不是"跌够了的洼地"。</div>
+<div class="rowline"><b>为什么这是"警惕"而不是"机会"｜</b>①它的定价锚是流动性预期 + 业绩韧性 + 现金流，这三条目前都缺乏向上催化（中信证券 09-18 口径：行情仍将围绕 AI 进展及主业业绩确定性演绎）；②人民币虽升破 6.7 是利好，但港股科技对外资流向的敏感度远高于 A 股；③连跌之后"底部钝化"的风险很高——价格不再创新低，但也不涨，时间成本会持续消耗持仓者。</div>
+<div class="rowline"><b>要看到什么才算转机｜</b>南向资金对头部互联网恢复连续净买入 + 恒生科技指数站回 MA60 上方。两者都没出现之前，"低位"不等于"机会"。</div>
+</div>
+
+<h2>五、产业链全景图：钱最终被谁赚走</h2>
+
+<p>把 Top5 里的三条硬逻辑（AI 算力硬件 / 创新药 / 贵金属）放在一张图上，可以看到瓶颈的分布——<strong>越靠上游、越是消耗性材料、认证周期越长的环节，越能在需求扩张时把利润留住</strong>。</p>
+
+<div class="chartbox">
+<svg viewBox="0 0 680 560" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="AI算力硬件产业链全景与瓶颈标注">
+  <rect x="0" y="0" width="680" height="560" fill="#ffffff"/>
+  <text x="16" y="24" font-size="14" font-weight="700" fill="#0f766e">AI 算力硬件产业链全景（瓶颈标注）</text>
+
+  <!-- 上游 -->
+  <rect x="16" y="42" width="648" height="150" rx="8" fill="#EEF3FA" stroke="#B5D4F4"/>
+  <text x="30" y="64" font-size="13" font-weight="700" fill="#1a4d8f">上游 · 材料与设备（供给弹性最差 → 瓶颈集中区）</text>
+
+  <rect x="30" y="76" width="150" height="52" rx="6" fill="#ffffff" stroke="#B5D4F4"/>
+  <text x="40" y="95" font-size="11.5" font-weight="700" fill="#1a1a2e">光刻胶 / 电子特气</text>
+  <text x="40" y="111" font-size="10.5" fill="#6b7280">消耗性材料 · 认证12-24月</text>
+  <text x="40" y="123" font-size="10.5" fill="#c0392b">★ S1 瓶颈：10/1 全球提价15%</text>
+
+  <rect x="192" y="76" width="150" height="52" rx="6" fill="#ffffff" stroke="#B5D4F4"/>
+  <text x="202" y="95" font-size="11.5" font-weight="700" fill="#1a1a2e">大硅片 / 先进封装材料</text>
+  <text x="202" y="111" font-size="10.5" fill="#6b7280">消耗性 · 良率爬坡难</text>
+  <text x="202" y="123" font-size="10.5" fill="#c0392b">★ S2 瓶颈</text>
+
+  <rect x="354" y="76" width="150" height="52" rx="6" fill="#ffffff" stroke="#B5D4F4"/>
+  <text x="364" y="95" font-size="11.5" font-weight="700" fill="#1a1a2e">前道量测 / 探针台</text>
+  <text x="364" y="111" font-size="10.5" fill="#6b7280">设备 · 单台价值量抬升</text>
+  <text x="364" y="123" font-size="10.5" fill="#c0392b">★ S2 瓶颈：交期翻倍</text>
+
+  <rect x="516" y="76" width="134" height="52" rx="6" fill="#ffffff" stroke="#B5D4F4"/>
+  <text x="526" y="95" font-size="11.5" font-weight="700" fill="#1a1a2e">光芯片 / 硅光</text>
+  <text x="526" y="111" font-size="10.5" fill="#6b7280">200G/lane · 扩产12-18月</text>
+  <text x="526" y="123" font-size="10.5" fill="#c0392b">★ S2 瓶颈</text>
+
+  <rect x="30" y="136" width="620" height="46" rx="6" fill="#ffffff" stroke="#B5D4F4" stroke-dasharray="4 3"/>
+  <text x="40" y="154" font-size="11" font-weight="700" fill="#1a4d8f">A 股 / 港股 ETF 映射</text>
+  <text x="40" y="172" font-size="10.5" fill="#374151">159516 半导体设备ETF国泰 · 588170 科创半导体ETF华夏 · 588710 科创半导体设备ETF华泰柏瑞 · 512480 半导体ETF国联安 · 515880 通信ETF国泰</text>
+
+  <!-- 箭头 -->
+  <line x1="340" y1="192" x2="340" y2="216" stroke="#0f766e" stroke-width="1.6" marker-end="url(#ar)"/>
+  <defs><marker id="ar" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 z" fill="#0f766e"/></marker></defs>
+
+  <!-- 中游 -->
+  <rect x="16" y="216" width="648" height="140" rx="8" fill="#FAF0EC" stroke="#F0997B"/>
+  <text x="30" y="238" font-size="13" font-weight="700" fill="#a3411d">中游 · 制造与集成（价值捕获 · 但估值分位最高）</text>
+
+  <rect x="30" y="250" width="196" height="46" rx="6" fill="#ffffff" stroke="#F0997B"/>
+  <text x="40" y="268" font-size="11.5" font-weight="700" fill="#1a1a2e">晶圆制造 / 存储</text>
+  <text x="40" y="284" font-size="10.5" fill="#6b7280">中芯国际 · 长鑫 · 兆易</text>
+
+  <rect x="242" y="250" width="196" height="46" rx="6" fill="#ffffff" stroke="#F0997B"/>
+  <text x="252" y="268" font-size="11.5" font-weight="700" fill="#1a1a2e">光模块 / CPO 封装</text>
+  <text x="252" y="284" font-size="10.5" fill="#6b7280">中际旭创 · 新易盛 · 天孚</text>
+
+  <rect x="454" y="250" width="196" height="46" rx="6" fill="#ffffff" stroke="#F0997B"/>
+  <text x="464" y="268" font-size="11.5" font-weight="700" fill="#1a1a2e">AI 芯片 / 服务器 / 液冷</text>
+  <text x="464" y="284" font-size="10.5" fill="#6b7280">海光 · 寒武纪 · 服务器</text>
+
+  <rect x="30" y="306" width="620" height="42" rx="6" fill="#ffffff" stroke="#F0997B"/>
+  <text x="40" y="324" font-size="11" font-weight="700" fill="#a3411d">估值警示</text>
+  <text x="40" y="340" font-size="10.5" fill="#374151">半导体 PE 84.5%分位 / PB 97.7%分位 / PS 97.7%分位　·　通信设备 PB 97.3%分位　·　电子 PB 94.5%分位　→ 逻辑对，但已被定价</text>
+
+  <line x1="340" y1="356" x2="340" y2="380" stroke="#0f766e" stroke-width="1.6" marker-end="url(#ar)"/>
+
+  <!-- 下游 -->
+  <rect x="16" y="380" width="648" height="100" rx="8" fill="#E5F7F0" stroke="#5DCAA5"/>
+  <text x="30" y="402" font-size="13" font-weight="700" fill="#0b6b52">下游 · 应用与需求（需求真实性来源）</text>
+  <rect x="30" y="414" width="196" height="50" rx="6" fill="#ffffff" stroke="#5DCAA5"/>
+  <text x="40" y="432" font-size="11.5" font-weight="700" fill="#1a1a2e">智算中心 / 超节点集群</text>
+  <text x="40" y="448" font-size="10.5" fill="#6b7280">华为昇腾960 (NPO) · 百万卡级</text>
+  <rect x="242" y="414" width="196" height="50" rx="6" fill="#ffffff" stroke="#5DCAA5"/>
+  <text x="252" y="432" font-size="11.5" font-weight="700" fill="#1a1a2e">大模型训练 / 推理</text>
+  <text x="252" y="448" font-size="10.5" fill="#6b7280">黄仁勋：2027 销量约2倍</text>
+  <rect x="454" y="414" width="196" height="50" rx="6" fill="#ffffff" stroke="#5DCAA5"/>
+  <text x="464" y="432" font-size="11.5" font-weight="700" fill="#1a1a2e">企业级 Agent 部署</text>
+  <text x="464" y="448" font-size="10.5" fill="#6b7280">推理算力 · 调用量仍在放量</text>
+
+  <!-- 底注 -->
+  <rect x="16" y="492" width="648" height="52" rx="6" fill="#fff9e6" stroke="#EF9F27"/>
+  <text x="28" y="510" font-size="11.5" font-weight="700" fill="#8a5a00">核心变量（决定这条链还能走多远）</text>
+  <text x="28" y="528" font-size="10.5" fill="#374151">① 海外云厂商资本开支指引是否维持（9 月中旬那波杀跌的原始导火索，至今无一家官宣削减）</text>
+  <text x="28" y="541" font-size="10.5" fill="#374151">② 材料涨价能否在三季报兑现为毛利率提升　③ 2028 年全球集中扩产是否造成阶段性过剩</text>
+</svg>
+<div class="cap">图 1 ｜ 产业链结构为研究员梳理；标注的瓶颈等级（S1/S2）依据"扩产周期 + 供应商数量 + 替代难度"定性判断，非量化评级。价格与估值数据见正文。</div>
+</div>
+
+<h3>咽喉点筛选表（四重标准）</h3>
+<table>
+<tr><th>候选环节</th><th>高增长</th><th>高利润</th><th>高壁垒</th><th>供给受限</th><th>判定</th></tr>
+<tr><td>光刻胶 / 电子特气</td><td>✓</td><td>待验证</td><td>✓</td><td>✓ 认证 12–24 月</td><td><b>★ 咽喉点候选（S1）</b></td></tr>
+<tr><td>大硅片 / 先进封装材料</td><td>✓</td><td>待验证</td><td>✓</td><td>✓ 良率爬坡难</td><td><b>★ 咽喉点候选（S2）</b></td></tr>
+<tr><td>前道量测 / 探针台</td><td>✓</td><td>待验证</td><td>✓</td><td>✓ 交期翻倍</td><td><b>★ 咽喉点候选（S2）</b></td></tr>
+<tr><td>光芯片 / 硅光引擎</td><td>✓</td><td>待验证</td><td>✓</td><td>✓ 扩产 12–18 月</td><td><b>★ 咽喉点候选（S2）</b></td></tr>
+<tr><td>晶圆制造 / 存储</td><td>✓</td><td>✗ 重资产</td><td>✓</td><td>✓ 资本密集</td><td>受益但非最上游</td></tr>
+<tr><td>光模块 / CPO 模组</td><td>✓</td><td>✓</td><td>△</td><td>✗ 组装环节竞争者多</td><td>弹性大、壁垒偏低</td></tr>
+<tr><td>AI 芯片 / 服务器</td><td>✓</td><td>△</td><td>✓</td><td>✗ 受制于上游</td><td>下游集成，看上游脸色</td></tr>
+</table>
+<p class="small">"高利润"列统一标"待验证"的原因：本次取到的毛利率数据是行业聚合值，未做逐环节拆分，不做无依据判断。</p>
+
+<h2>六、三张图看清位置</h2>
+
+<div class="chartbox">
+  <div id="chart1" style="width:100%;height:420px;"></div>
+  <div class="cap">图 2 ｜ 主要 ETF 多周期涨跌幅（前复权，截至 2026-09-18）。<b>配色按 A 股口径：红 = 涨，绿 = 跌；同一 ETF 的三根柱由深到浅依次为 5 日 / 20 日 / 60 日。</b><b>读法：</b>60 日柱为红 = 中期趋势还在；5 日红而 60 日绿 = 下跌趋势中的反弹（左侧）；两根都红 = 趋势与动量共振（右侧）。数据来源：腾讯日 K（fqkline），见文末附表。</div>
+</div>
+
+<div class="chartbox">
+  <div id="chart2" style="width:100%;height:520px;"></div>
+  <div class="cap">图 3 ｜ 关键板块估值历史分位（申万行业口径，截至 2026-09-17）。<b>读法：</b>两条柱子都超过 80% = 估值处于历史高位区；都低于 30% = 历史低位区。光伏设备 PE 为负（行业整体亏损），故 PE 分位留空。数据来源：腾讯自选股行业估值接口。</div>
+</div>
+
+<div class="chartbox">
+  <div id="chart3" style="width:100%;height:460px;"></div>
+  <div class="cap">图 4 ｜ 行业主力资金净流入（5 日 / 20 日，亿元）。<b>配色按 A 股口径：红 = 净流入，绿 = 净流出；深色柱为 5 日，浅色柱为 20 日。</b><b>读法：</b>5 日红 + 20 日绿 = 资金刚开始回流（半导体、电子化学品、光学光电子）；两根都红 = 持续流入（通信设备、通用设备、医疗服务）；两根都绿 = 持续流出（电池、光伏、化学制药、工业金属）。数据来源：腾讯自选股板块资金接口，单位已换算为亿元。</div>
+</div>
+
+<h2>七、附表：多周期收益矩阵</h2>
+<table>
+<tr><th>ETF</th><th>代码</th><th class="num">今收</th><th class="num">当日</th><th class="num">5 日</th><th class="num">20 日</th><th class="num">60 日</th></tr>
+<tr><td>科创半导体ETF华夏</td><td>588170</td><td class="num">1.020</td><td class="num up">+4.19%</td><td class="num up">+13.97%</td><td class="num up">+0.79%</td><td class="num dn">-15.28%</td></tr>
+<tr><td>半导体设备ETF国泰</td><td>159516</td><td class="num">0.730</td><td class="num up">+3.84%</td><td class="num up">+11.79%</td><td class="num up">+0.14%</td><td class="num dn">-17.14%</td></tr>
+<tr><td>科创芯片ETF嘉实</td><td>588200</td><td class="num">1.184</td><td class="num up">+3.77%</td><td class="num up">+8.72%</td><td class="num up">+0.94%</td><td class="num dn">-20.86%</td></tr>
+<tr><td>半导体ETF国联安</td><td>512480</td><td class="num">1.041</td><td class="num up">+4.00%</td><td class="num up">+8.44%</td><td class="num dn">-0.10%</td><td class="num dn">-24.24%</td></tr>
+<tr><td>中韩半导体ETF华泰柏瑞</td><td>513310</td><td class="num">4.840</td><td class="num up">+2.07%</td><td class="num up">+2.33%</td><td class="num dn">-0.21%</td><td class="num dn">-25.19%</td></tr>
+<tr><td>通信ETF国泰</td><td>515880</td><td class="num">0.704</td><td class="num up">+2.62%</td><td class="num up">+4.30%</td><td class="num up">+3.99%</td><td class="num dn">-19.91%</td></tr>
+<tr><td>通信ETF华夏</td><td>515050</td><td class="num">1.070</td><td class="num up">+2.49%</td><td class="num up">+2.20%</td><td class="num up">+1.90%</td><td class="num dn">-21.27%</td></tr>
+<tr><td>软件ETF嘉实</td><td>159852</td><td class="num">0.659</td><td class="num up">+2.33%</td><td class="num up">+1.85%</td><td class="num dn">-2.37%</td><td class="num dn">-1.05%</td></tr>
+<tr><td>机器人ETF华夏</td><td>562500</td><td class="num">0.934</td><td class="num up">+1.97%</td><td class="num up">+2.64%</td><td class="num dn">-2.51%</td><td class="num dn">-14.86%</td></tr>
+<tr><td>港股创新药ETF广发</td><td>513120</td><td class="num">1.293</td><td class="num up">+0.70%</td><td class="num up">+5.21%</td><td class="num dn">-2.78%</td><td class="num up">+28.02%</td></tr>
+<tr><td>医疗ETF华宝</td><td>512170</td><td class="num">0.340</td><td class="num up">+0.89%</td><td class="num up">+3.98%</td><td class="num dn">-2.58%</td><td class="num up">+14.86%</td></tr>
+<tr><td>创新药ETF银华</td><td>159992</td><td class="num">0.835</td><td class="num up">+0.60%</td><td class="num up">+3.99%</td><td class="num dn">-6.49%</td><td class="num up">+10.89%</td></tr>
+<tr><td>中药ETF</td><td>560900</td><td class="num">0.899</td><td class="num up">+0.67%</td><td class="num up">+4.05%</td><td class="num dn">-6.45%</td><td class="num up">+10.71%</td></tr>
+<tr><td>黄金ETF华安</td><td>518880</td><td class="num">9.010</td><td class="num up">+1.73%</td><td class="num up">+0.75%</td><td class="num dn">-4.03%</td><td class="num up">+7.39%</td></tr>
+<tr><td>黄金股ETF永赢</td><td>517520</td><td class="num">2.075</td><td class="num up">+1.72%</td><td class="num dn">-1.94%</td><td class="num dn">-8.71%</td><td class="num up">+30.75%</td></tr>
+<tr><td>银行ETF华宝</td><td>512800</td><td class="num">0.840</td><td class="num dn">-0.24%</td><td class="num dn">-0.83%</td><td class="num up">+3.07%</td><td class="num up">+12.60%</td></tr>
+<tr><td>红利ETF华泰柏瑞</td><td>510880</td><td class="num">3.340</td><td class="num dn">-0.24%</td><td class="num dn">-2.31%</td><td class="num dn">-1.39%</td><td class="num up">+13.07%</td></tr>
+<tr><td>煤炭ETF国泰</td><td>515220</td><td class="num">1.250</td><td class="num dn">-0.72%</td><td class="num dn">-3.25%</td><td class="num dn">-2.11%</td><td class="num up">+15.63%</td></tr>
+<tr><td>香港证券ETF易方达</td><td>513090</td><td class="num">1.799</td><td class="num up">+1.58%</td><td class="num dn">-0.83%</td><td class="num dn">-1.53%</td><td class="num up">+3.21%</td></tr>
+<tr><td>恒生科技ETF华泰柏瑞</td><td>513130</td><td class="num">0.546</td><td class="num up">+2.44%</td><td class="num up">+1.49%</td><td class="num dn">-7.46%</td><td class="num up">+2.25%</td></tr>
+<tr><td>中概互联网ETF易方达</td><td>513050</td><td class="num">1.014</td><td class="num up">+1.10%</td><td class="num dn">-0.10%</td><td class="num dn">-9.38%</td><td class="num up">+7.76%</td></tr>
+<tr><td>航空航天ETF华夏</td><td>159227</td><td class="num">1.026</td><td class="num up">+1.18%</td><td class="num dn">-2.84%</td><td class="num up">+4.48%</td><td class="num dn">-6.13%</td></tr>
+<tr><td>光伏ETF华泰柏瑞</td><td>515790</td><td class="num">0.815</td><td class="num up">+2.77%</td><td class="num up">+2.77%</td><td class="num dn">-4.34%</td><td class="num dn">-18.74%</td></tr>
+<tr><td>电池ETF广发</td><td>159755</td><td class="num">0.877</td><td class="num up">+1.15%</td><td class="num up">+1.15%</td><td class="num dn">-8.84%</td><td class="num dn">-17.50%</td></tr>
+<tr><td>新能源ETF南方</td><td>516160</td><td class="num">2.330</td><td class="num up">+1.57%</td><td class="num up">+1.22%</td><td class="num dn">-8.01%</td><td class="num dn">-19.35%</td></tr>
+<tr><td>房地产ETF南方</td><td>512200</td><td class="num">1.230</td><td class="num up">+3.71%</td><td class="num up">+3.71%</td><td class="num up">+1.82%</td><td class="num up">+3.27%</td></tr>
+</table>
+<p class="small">涨跌幅基于前复权净值，与指数口径可能有细微差异；房地产ETF 当日与 5 日数值相同系数据源取整，以 3.7% 左右为准。数据来源：腾讯日 K 接口 + akshare ETF 快照，截至 2026-09-18 收盘。</p>
+
+<h2>八、跟踪里程碑与熔断规则</h2>
+
+<p>下面是对上述线索的<b>研究跟踪表</b>（不是交易指令）。每一项都给了可验证的截止时间和明确的判定条件。</p>
+
+<table>
+<tr><th>赛道</th><th>跟踪里程碑</th><th>最晚观察时间</th><th>达成代表</th><th>未达成代表</th></tr>
+<tr><td>半导体设备/材料</td><td>三季报中设备与材料公司的合同负债、在手订单同比增长是否加速；光刻胶提价是否体现在毛利率</td><td>2026-10-31</td><td>涨价逻辑开始兑现为业绩，线索升级</td><td>涨价未传导 → 降为「观察线索」</td></tr>
+<tr><td>光通信/CPO</td><td>三季报中光模块龙头的 800G/1.6T 出货占比与订单指引；华为昇腾 960 产业链的交付节奏</td><td>2026-10-31</td><td>20 日资金持续净流入得以延续</td><td>资金转为净流出 → 动量线索失效</td></tr>
+<tr><td>创新药</td><td>四季度 BD 交易月度节奏（1–8 月已 113 起）；医保谈判结果；创新药月度批准数量</td><td>2026-12-31</td><td>出海现金流持续放量，逻辑自我强化</td><td>BD 节奏显著放缓 → 逻辑降级</td></tr>
+<tr><td>黄金/贵金属</td><td>10 月与 12 月 FOMC 决议；10Y 美债收益率是否突破 5.2%；央行购金月度数据</td><td>2026-12-31</td><td>实际利率下行确认 → 对冲腿有效</td><td>再度加息 + 美债上破 5.2% → 减配</td></tr>
+<tr><td>红利/银行</td><td>三季报净息差同比方向；保险资金权益配置比例；北向/南向对银行股的净买卖</td><td>2026-10-31</td><td>净息差继续回升 → 防守腿成立</td><td>净息差再度收窄 → 降低底仓权重</td></tr>
+</table>
+
+<h4>熔断规则（研究跟踪用，非自动交易指令）</h4>
+<table>
+<tr><th>优先级</th><th>触发条件</th><th>跟踪动作</th></tr>
+<tr><td>🔴 红色（极高）</td><td>沪深300 收盘跌破 4,400（9 月低点 4,450 下方）<b>且</b>两市成交额回落到 1.7 万亿以下</td><td>把全部「主攻」线索降级为「失效观察」；复核方向性判断是否仍成立</td></tr>
+<tr><td>🟠 橙色（高）</td><td>半导体行业 20 日主力净流出重新扩大到 -500 亿以上</td><td>降低半导体链的研究权重；优先复核估值分位是否进一步抬升</td></tr>
+<tr><td>🟠 橙色（高）</td><td>通信设备 20 日主力净流入由正转负</td><td>说明动量线索失效，把光通信降为「观察」</td></tr>
+<tr><td>⚫ 系统级</td><td>美联储在 10 月或 12 月再度加息，且 10Y 美债上破 5.2%</td><td>立即复核全部成长类线索；把关注重心切向对冲腿（黄金）与底仓（红利/银行）</td></tr>
+</table>
+
+<h2>九、防幻觉检查</h2>
+
+<table>
+<tr><th>容易被夸大的说法</th><th>夸大的原因</th><th>严谨的表述</th></tr>
+<tr><td>"医药 3.5 万亿市场"</td><td>把"规上医药工业企业营业收入"混同为"创新药市场空间"</td><td>3.5 万亿是《医药工业发展"十五五"规划》对 <b>2030 年规模以上医药工业企业营业收入</b>的目标；创新药只是其中一部分，且该数字本身包含仿制药、原料药、器械等</td></tr>
+<tr><td>"创新药年均增速 &gt;20%"</td><td>把政策设定目标当作预测值/可实现值</td><td>这是规划提出的<b>预期性指标</b>，不是市场预测，也不构成任何单一公司的业绩承诺</td></tr>
+<tr><td>"半导体两日净流入 318 亿"</td><td>媒体口径，跨源可比性未验证</td><td>09-16 约 136.5 亿、09-18 约 187.5 亿，均为<b>媒体报道口径</b>；本报告另取的行业接口口径为 09-18 当日 +187.5 亿、5 日 +243.8 亿、<b>20 日仍为 -422.7 亿</b>——后一个数字更能说明"这不是持续加仓"</td></tr>
+<tr><td>"存储同比 +250%"</td><td>券商研报预测被当作既成事实</td><td>来源为国泰海通研报观点（<b>非一手来源，需核实原文</b>），属预测值；本报告未把它用作任何结论的依据</td></tr>
+<tr><td>"黄金必有 5,400 美元"</td><td>把单一机构目标价当作确定性</td><td>高盛 2027 年底 5,400 美元/盎司是<b>单一机构预测</b>；同一时间摩根大通认为比特币的上涨空间大于黄金</td></tr>
+<tr><td>"港股创新药 60 日 +28%，趋势最强"</td><td>只看 60 日窗口，掩盖 20 日已转负</td><td>准确表述：60 日 +28.02%（全表最强），<b>但 20 日为 -2.78%</b>——处于强势后的整理，不是加速期</td></tr>
+<tr><td>"低估值 = 安全"</td><td>忽略"低估值"本身可能来自资金持续流出</td><td>红利/银行 PB 1.69% 分位确实极低，但银行概念 20 日主力净流出 -96.7 亿、国有大行 20 日 -32.6 亿——低估值与资金流出可以同时成立</td></tr>
+</table>
+
+<h2>十、一句话闭环</h2>
+<div class="note plain">
+<strong>【需求增长 → 供给约束 → 价值捕获 → 现阶段该关注什么】</strong><br><br>
+AI 算力从训练走向推理、国产替代被外部管制持续强化（<b>需求增长</b>），而光刻胶/电子特气/大硅片/光芯片这些消耗性材料环节认证周期长、扩产慢，海外龙头已经开始提价并拉长交期（<b>供给约束</b>），因此利润最可能留在上游材料与量测设备环节（<b>价值捕获</b>）；与此同时创新药靠 BD 出海拿到真实现金流、黄金靠央行购金与实际利率见顶（<b>另一条独立的对冲线</b>）。<br><br>
+<b>但当前沪深300 仍处空头（4,507 &lt; MA20 4,549 &lt; MA60 4,655），全 A 股 PE 在 10 年 76.9% 分位——这不是全面进攻的环境。</b>因此：进攻端只做「回撤买」不做「追高买」（半导体设备/材料、光通信），中期底仓看创新药，对冲腿看黄金，防守腿看红利/银行；同时把次新股情绪、电池、光伏、军工、港股互联网这五块放进「不复核不新增」的名单。
+</div>
+
+<div class="note">
+<strong>免责声明：</strong>以上内容基于公开数据和量化分析，仅供参考，不构成投资建议。市场有风险，投资需谨慎。任何投资决策应结合个人风险承受能力、资金状况和投资目标独立判断，必要时咨询持牌专业机构。过往表现不预示未来收益。
+</div>
+
+<p class="small" style="margin-top:26px">
+<b>数据来源与口径说明</b><br>
+· 指数、板块涨跌幅、估值分位、资金流：腾讯自选股结构化接口（westock），板块为申万行业口径；估值分位截止 2026-09-17，行情截止 2026-09-18 收盘。<br>
+· 成交额、两融、国债收益率：akshare-data（新浪/东方财富/交易所 EOD 口径），两融为 2026-09-17 T+1 数据，美债为 2026-09-17 EOD。<br>
+· ETF 多周期涨跌幅：腾讯日 K 接口（前复权），akshare ETF 快照（成交额/规模），截止 2026-09-18 收盘。<br>
+· 跨市场行情（港股/韩国/商品/汇率/美股盘前）：新浪快照，2026-09-18 18:04 北京时间。<br>
+· 新闻与政策：财联社、华尔街见闻、中新经纬、东方财富、格隆汇等公开报道（<b>非一手来源，需核实原文</b>）；政策原文以部委发布为准。<br>
+· 本报告中的产业链结构、咽喉点评级、信号聚类为研究员定性判断，非量化评级，不可回测。
+</p>
+
+</div>
+
+<script>
+(function () {
+  if (typeof echarts === 'undefined') { return; }
+
+  // A 股口径：涨/流入 = 红，跌/流出 = 绿
+  var RED = '192,57,43', GRN = '30,132,73';
+  function signBar(arr, opacity) {
+    return arr.map(function (v) {
+      var rgb = v >= 0 ? RED : GRN;
+      return { value: v, itemStyle: { color: 'rgba(' + rgb + ',' + opacity + ')' } };
+    });
+  }
+  function fmtPct(v) { return (v === null || v === undefined) ? '无数据' : v + '%'; }
+
+  var c1 = document.getElementById('chart1');
+  if (c1) {
+    echarts.init(c1).setOption({
+      tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+      legend: { data: ['5日', '20日', '60日'], top: 4 },
+      grid: { left: 58, right: 18, top: 46, bottom: 112 },
+      xAxis: {
+        type: 'category',
+        axisLabel: { rotate: 42, fontSize: 10, interval: 0 },
+        data: ['科创半导体', '半导体设备', '半导体', '科创芯片', '通信国泰', '通信华夏', '港股创新药', '医疗', '黄金', '黄金股', '银行', '红利', '煤炭', '香港证券', '恒生科技', '中概互联', '航空航天', '房地产', '软件', '机器人', '光伏', '电池', '新能源']
+      },
+      yAxis: { type: 'value', name: '%' },
+      series: [
+        { name: '5日', type: 'bar', data: signBar([13.97, 11.79, 8.44, 8.72, 4.30, 2.20, 5.21, 3.98, 0.75, -1.94, -0.83, -2.31, -3.25, -0.83, 1.49, -0.10, -2.84, 3.71, 1.85, 2.64, 2.77, 1.15, 1.22], 0.95) },
+        { name: '20日', type: 'bar', data: signBar([0.79, 0.14, -0.10, 0.94, 3.99, 1.90, -2.78, -2.58, -4.03, -8.71, 3.07, -1.39, -2.11, -1.53, -7.46, -9.38, 4.48, 1.82, -2.37, -2.51, -4.34, -8.84, -8.01], 0.62) },
+        { name: '60日', type: 'bar', data: signBar([-15.28, -17.14, -24.24, -20.86, -19.91, -21.27, 28.02, 14.86, 7.39, 30.75, 12.60, 13.07, 15.63, 3.21, 2.25, 7.76, -6.13, 3.27, -1.05, -14.86, -18.74, -17.50, -19.35], 0.34) }
+      ]
+    });
+  }
+
+  var c2 = document.getElementById('chart2');
+  if (c2) {
+    echarts.init(c2).setOption({
+      tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, valueFormatter: fmtPct },
+      legend: { data: ['PB 分位', 'PE 分位'], top: 4 },
+      grid: { left: 122, right: 48, top: 44, bottom: 26 },
+      xAxis: { type: 'value', max: 100, name: '历史分位(%)' },
+      yAxis: {
+        type: 'category',
+        axisLabel: { fontSize: 11 },
+        data: ['银行(国有大行)', '证券', '有色金属', '电池', '白酒', '贵金属', '医药生物', '光伏设备', '化学制药', '通信(一级)', '计算机', '生物制品', '电子', '通信设备', '半导体', '军工电子', '航天装备']
+      },
+      series: [
+        { name: 'PB 分位', type: 'bar', itemStyle: { color: '#2f5d8a' }, data: [1.69, 7.93, 60.07, 55.57, 73.44, 80.32, 49.76, 42.59, 64.43, 54.09, 71.08, 42.68, 94.48, 97.29, 97.68, 76.62, 90.13] },
+        { name: 'PE 分位', type: 'bar', itemStyle: { color: '#c98a2b' }, data: [13.83, 17.47, 23.61, 35.37, 28.13, 35.00, 63.97, null, 71.61, 49.93, 91.61, 97.28, 79.95, 81.90, 84.51, 99.39, 98.35] }
+      ]
+    });
+  }
+
+  var c3 = document.getElementById('chart3');
+  if (c3) {
+    echarts.init(c3).setOption({
+      tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+      legend: { data: ['5日净流入', '20日净流入'], top: 4 },
+      grid: { left: 100, right: 44, top: 44, bottom: 26 },
+      xAxis: { type: 'value', name: '亿元' },
+      yAxis: {
+        type: 'category',
+        axisLabel: { fontSize: 11 },
+        data: ['航空装备', '光伏设备', '工业金属', '化学制药', '证券', '贵金属', '电池', '国有大型银行', '航天装备', '医疗服务', '房地产开发', '通用设备', '电子化学品', '通信设备', '光学光电子', '半导体']
+      },
+      series: [
+        { name: '5日净流入', type: 'bar', data: signBar([-37.6, 11.9, -42.6, -15.7, -26.7, -11.1, -57.1, -15.9, -3.5, 41.6, 16.6, 48.0, 48.1, 49.8, 44.2, 243.8], 0.95) },
+        { name: '20日净流入', type: 'bar', data: signBar([-12.1, -94.1, -114.0, -123.5, -68.0, -76.1, -218.3, -32.6, -22.5, 3.2, 2.0, 5.0, 4.9, 51.9, -62.9, -422.7], 0.58) }
+      ]
+    });
+  }
+})();
+</script>
+</body>
+</html>
