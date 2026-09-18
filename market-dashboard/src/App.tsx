@@ -14,6 +14,14 @@ const TOAST_MS = 2600
 /** 两个看板共用同一套外壳，用顶部标签切换。 */
 type View = 'market' | 'holdings'
 
+/**
+ * 是否运行在桌面版（Electron）里：UA 会带 `Electron` 标识，Web 浏览器没有。
+ * 桌面版用 hiddenInset 标题栏，红绿灯按钮浮在页面上——根节点挂 `app--desktop`，
+ * App.css 据此让顶栏左侧给红绿灯让位、并把顶栏变成可拖拽窗口的区域。
+ */
+const IS_DESKTOP =
+  typeof navigator !== 'undefined' && navigator.userAgent.includes('Electron')
+
 const VIEW_META: Record<View, { title: string; sub: string; sources: string }> = {
   market: {
     title: '大盘趋势',
@@ -123,7 +131,7 @@ export default function App() {
   const meta = VIEW_META[view]
 
   return (
-    <div className="app">
+    <div className={`app${IS_DESKTOP ? ' app--desktop' : ''}`}>
       {/* 折叠式快讯坞：只挂在大盘趋势页；收起时是右侧窄竖条，不占布局 */}
       <NewsDock active={view === 'market'} />
 

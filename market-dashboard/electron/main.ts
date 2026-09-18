@@ -159,6 +159,10 @@ async function createWindow(): Promise<void> {
     title: 'A股看板',
     backgroundColor: '#f7f7f5',
     autoHideMenuBar: true,
+    // 隐藏独立标题栏：红绿灯按钮浮在页面内容上（位置与 App.css 的 .app--desktop 顶栏对齐），
+    // 窗口拖拽 / 双击最大化由页面顶栏的 -webkit-app-region: drag 接管（见 App.css 桌面版段落）
+    titleBarStyle: 'hiddenInset',
+    trafficLightPosition: { x: 16, y: 24 },
     webPreferences: {
       // 本地渲染无远程内容；暂不需要 preload（阶段2导入向导再加 IPC）
       contextIsolation: true,

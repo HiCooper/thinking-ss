@@ -5,6 +5,23 @@
   padding: 20px 20px 40px;
 }
 
+/* ============================ 桌面版（Electron）适配 ============================ */
+/* 桌面版用 hiddenInset 标题栏：没有独立标题栏那一行，系统红绿灯（关闭/最小化/放大）
+   直接浮在页面左上角（约 16,24 处，与 main.ts 的 trafficLightPosition 对应）。
+   顶栏整行变成「窗口拖拽区」（-webkit-app-region: drag，双击可最大化），
+   tab 按钮等可点元素单独声明 no-drag，否则点击会被拖拽行为吞掉。
+   仅在 UA 带 Electron 时挂 .app--desktop，Web 版布局零影响。 */
+.app--desktop .headerbar {
+  -webkit-app-region: drag;
+  padding-left: 84px; /* 给左上角的红绿灯让位，tab 从灯后面开始 */
+}
+.app--desktop .headerbar button {
+  -webkit-app-region: no-drag;
+}
+.app--desktop .headerbar__sources {
+  -webkit-app-region: drag; /* 顶栏下方的数据来源行也纳入拖拽区，加大可抓取面积 */
+}
+
 .card {
   background: var(--bg-elevated);
   border: 1px solid var(--border);
@@ -1003,7 +1020,6 @@ code {
 
 /* —— 明细表卡片 —— */
 .holdings-table-card {
-  margin-top: 18px;
   padding: 16px 18px 12px;
 }
 
@@ -1477,3 +1493,4 @@ code {
     display: none;
   }
 }
+
