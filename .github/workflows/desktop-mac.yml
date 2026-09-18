@@ -70,6 +70,18 @@ jobs:
             - **Intel** Mac 下载 `MarketDashboard-0.1.0.dmg`
 
             持仓数据不在包内：首次打开后通过「导入持仓」选择本地文件即可（数据只存在本机）。
+
+            ### GitHub 直连慢 / 下载失败？备用下载源
+
+            以下为第三方公共代理镜像（按 URL 前缀代理，指向同一份文件；可用性取决于代理站，逐一尝试）：
+
+            ```
+            https://ghproxy.net/https://github.com/HiCooper/thinking-ss/releases/download/desktop-latest/MarketDashboard-0.1.0.dmg
+            https://gh-proxy.com/https://github.com/HiCooper/thinking-ss/releases/download/desktop-latest/MarketDashboard-0.1.0.dmg
+            https://ghfast.top/https://github.com/HiCooper/thinking-ss/releases/download/desktop-latest/MarketDashboard-0.1.0.dmg
+            ```
+
+            Apple Silicon 版把末尾文件名换成 `MarketDashboard-0.1.0-arm64.dmg` 即可。
           files: market-dashboard/release/*.dmg
 
       - name: Publish versioned release (tag pushes only)

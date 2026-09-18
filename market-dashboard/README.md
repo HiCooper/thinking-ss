@@ -45,6 +45,28 @@ npm run holdings:export # 由仓库根 holdings.md 重新生成 public/holdings.
 > 所以实时数据在 `npm run dev` / `npm run preview` 下可用；把 `dist/` 静态托管到别处（无 Node 服务）时，
 > 实时面板会**降级成一条提示**，六张历史图不受影响。
 
+## 桌面版（Mac App）：下载即用
+
+不想装 Node？CI 每次 push 到 main 自动打包 macOS App，**免登录直接下载**（也在 GitHub Releases 页的「桌面版 · 最新构建」预发布里）：
+
+- **Intel** Mac：`https://github.com/HiCooper/thinking-ss/releases/download/desktop-latest/MarketDashboard-0.1.0.dmg`
+- **Apple Silicon**：`https://github.com/HiCooper/thinking-ss/releases/download/desktop-latest/MarketDashboard-0.1.0-arm64.dmg`
+
+**安装**：打开 dmg → 拖入「应用程序」→ 首次打开**右键 → 打开**（未公证签名，仅需一次）。
+
+- **历史数据**：包内自带基线，启动后自动从 jsdelivr/raw 拉最新 `data.json` 缓存到本地（每 6 小时静默刷新；断网/拉不到就用包内版本，**永不白屏**）。
+- **实时接口**：App 内置了与 Web 版同一份代理服务（`server/apiCore.ts`），只绑 `127.0.0.1` 随机端口，与 Web 版互不冲突。
+- **持仓**：包内不含持仓（隐私）。在仓库根准备好 `holdings.json` 后放到 `~/Library/Application Support/MarketDashboard/holdings.json` 即可被读取；应用内导入向导见后续版本。
+- **开发**：`npm run desktop:pack` 本地出 dmg（产物在 `release/`，已 gitignore）；`npm run desktop:start` 直接起桌面版。打 tag `v*` 会额外发一个正式 Release 归档。
+
+**GitHub 直连慢？** 以下第三方公共代理镜像按 URL 前缀代理，指向同一份文件（可用性取决于代理站，逐一尝试；Apple Silicon 版换末尾文件名）：
+
+```
+https://ghproxy.net/https://github.com/HiCooper/thinking-ss/releases/download/desktop-latest/MarketDashboard-0.1.0.dmg
+https://gh-proxy.com/https://github.com/HiCooper/thinking-ss/releases/download/desktop-latest/MarketDashboard-0.1.0.dmg
+https://ghfast.top/https://github.com/HiCooper/thinking-ss/releases/download/desktop-latest/MarketDashboard-0.1.0.dmg
+```
+
 ## 看什么
 
 **指数信息条（吸底）**：**上证 / 深成 / 创业板 / 科创50 / 北证50** 五个指数各带实时价与涨跌幅，**固定在屏幕最底部、铺满 100% 宽**，始终可见（5 等列；<1080px 降 3 列、<640px 降 2 列）。仅在**大盘趋势**页出现（持仓页不渲染 `LiveStrip`，底栏自然不存在）。
