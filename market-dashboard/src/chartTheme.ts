@@ -72,7 +72,9 @@ export function dataZoomBase(startPercent = 45): Record<string, unknown>[] {
       start: startPercent,
       end: 100,
       minValueSpan: 15,
-      zoomOnMouseWheel: true,
+      // 滚轮缩放已禁用：翻页浏览时鼠标划过图表就改了缩放区间，属于误触；
+      // 缩放走底部滑条，拖拽平移仍保留（moveOnMouseMove，刻意的操作）
+      zoomOnMouseWheel: false,
       moveOnMouseMove: true,
     },
     {
