@@ -1,0 +1,29 @@
+# electron-builder 配置（桌面版打包）
+# 本地构建：npm run desktop:pack   产物在 release/*.dmg
+# CI 构建：  GitHub Actions macos-latest 同样调用 desktop:pack
+appId: com.hicooper.market-dashboard
+productName: MarketDashboard
+
+directories:
+  output: release
+
+# 运行时只需要：前端产物 + 主进程产物 + package.json。
+# react/echarts 已被 vite 打进 dist、被 esbuild 打进 main.cjs，
+# 所以它们放在 devDependencies，electron-builder 不会把 node_modules 塞进包里。
+files:
+  - dist/**/*
+  - dist-electron/**/*
+  - package.json
+
+asar: true
+
+mac:
+  # 无 Apple 开发者账号：跳过身份签名（electron-builder 会做 ad-hoc 签名，
+  # Apple Silicon 上这是强制要求）。用户首次打开需「右键 → 打开」绕过 Gatekeeper。
+  identity: null
+  category: public.finance
+  target:
+    - target: dmg
+      arch:
+        - arm64
+        - x64

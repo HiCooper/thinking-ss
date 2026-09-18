@@ -35,3 +35,7 @@ market-dashboard/public/holdings-history.json
 
 # WorkBuddy agent 的本地工作数据（项目记忆 / 会话日志），只属于这台机器
 /.workbuddy/
+
+# ── 桌面版（Electron）构建产物：体积大、可由 CI 复现，不入库 ──
+market-dashboard/dist-electron/
+market-dashboard/release/

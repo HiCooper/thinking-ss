@@ -1,0 +1,56 @@
+# 桌面版（macOS dmg）自动构建
+#
+# 触发：
+#   - push 到 main 且改动涉及 market-dashboard/** → 构建 dmg 并上传为 workflow artifact
+#   - push tag v* → 同样构建，并把 dmg 附加到 GitHub Release（用户从这里下载）
+#
+# 说明：历史数据 data.json 随仓库提交（构建时直接打进包里作为基线），
+# App 启动后会自动从 jsdelivr/raw 拉最新数据覆盖本地缓存，所以 CI 不需要跑数据管线。
+name: desktop-mac
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'market-dashboard/**'
+      - '.github/workflows/desktop-mac.yml'
+    tags: ['v*']
+  workflow_dispatch:
+
+jobs:
+  build-mac:
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: market-dashboard
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: market-dashboard/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build & pack dmg
+        env:
+          # 无 Apple 开发者账号：跳过身份签名查找（electron-builder.yml 里 identity: null 已声明）
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: npm run desktop:pack
+
+      - name: Upload dmg (artifact, every build)
+        uses: actions/upload-artifact@v4
+        with:
+          name: mac-dmg
+          path: market-dashboard/release/*.dmg
+          if-no-files-found: error
+
+      - name: Attach dmg to GitHub Release (tag pushes only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: market-dashboard/release/*.dmg
+          generate_release_notes: true

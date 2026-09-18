@@ -4,6 +4,7 @@
   "version": "0.1.0",
   "type": "module",
   "description": "A股大盘看板 — 两市成交额 / 中美10年期国债收益率 / 融资融券",
+  "main": "dist-electron/main.cjs",
   "scripts": {
     "start": "bash scripts/start.sh",
     "dev": "vite",
@@ -14,18 +15,22 @@
     "data:refresh": "bash scripts/refresh.sh",
     "data:validate": "python3 scripts/validate_data.py",
     "holdings:export": "python3 scripts/export_holdings.py",
-    "holdings:snapshot": "python3 scripts/record_holdings_snapshot.py"
-  },
-  "dependencies": {
-    "echarts": "^6.1.0",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "holdings:snapshot": "python3 scripts/record_holdings_snapshot.py",
+    "desktop:build": "vite build && node scripts/build-electron.mjs",
+    "desktop:start": "npm run desktop:build && electron .",
+    "desktop:pack": "npm run desktop:build && electron-builder --mac"
   },
   "devDependencies": {
     "@types/node": "^22.20.2",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^6.1.1",
+    "echarts": "^6.1.0",
+    "electron": "^38.0.0",
+    "electron-builder": "^26.0.0",
+    "esbuild": "^0.28.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
     "typescript": "^5.6.3",
     "vite": "^8.3.0"
   },
