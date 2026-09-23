@@ -336,6 +336,103 @@ export function buildCells(file: HoldingsFile, quotes: HoldingQuotesFile | null)
   })
 }
 
+/* ------------------------- 已实现卖出（当日记账） ------------------------- */
+
+/** realized-trades.json 里的一条清仓卖出（字段与 scripts/record_holdings_snapshot.py 对齐） */
+export interface RealizedTrade {
+  date: string
+  code: string
+  name?: string
+  shares: number
+  price: number
+  cost?: number
+  fee?: number
+  /** 券商口径的当日已实现盈亏（含费）；填了就优先用它，否则用实时报价现算 */
+  day_realized?: number
+}
+
+export interface RealizedTradesFile {
+  trades?: RealizedTrade[]
+}
+
+/** 当日已实现卖出并入「今日盈亏」的增量 */
+export interface RealizedToday {
+  /** 当日已实现盈亏合计（含费），直接加进今日盈亏 */
+  pnl: number
+  /** 卖出净额（现金）——只用于今日盈亏率的分母（昨收账户权益），不改市值显示 */
+  cash: number
+}
+
+/**
+ * 读已清仓卖出记录。文件**不存在是正常状态**（从没卖过），返回 null 而不是报错。
+ * 注意 Vite dev 的坑：文件缺失时会回退 index.html 并返回 200，所以还要看 content-type。
+ */
+export async function fetchRealizedTrades(signal?: AbortSignal): Promise<RealizedTradesFile | null> {
+  let res: Response
+  try {
+    res = await fetch('realized-trades.json', { signal, cache: 'no-store' })
+  } catch (err) {
+    if (err instanceof DOMException && err.name === 'AbortError') throw err
+    return null
+  }
+  if (!res.ok) return null
+  if (!(res.headers.get('content-type') ?? '').includes('json')) return null
+  try {
+    return (await res.json()) as RealizedTradesFile
+  } catch {
+    return null
+  }
+}
+
+/** 北京时间的「今天」（YYYY-MM-DD）。卖出记录的 date 是交易日，与它比对。 */
+function beijingToday(): string {
+  return new Date(Date.now() + 8 * 3_600_000).toISOString().slice(0, 10)
+}
+
+/**
+ * 挑出「date == 今天」的卖出并折算成今日盈亏增量。
+ *
+ * 只认**今天**的记录：更早的卖出已经结算进每日收益记录（holdings-history.json），
+ * 在这里重复计入会让周六打开页面时凭空多出一笔周五的已实现盈亏。
+ *
+ * 单条折算优先级：`day_realized`（券商口径，含费）→ 实时报价现算
+ * `份额 ×（现价 − 昨收）− fee`。连实时报价都拿不到时跳过该条（不猜数）。
+ */
+export function realizedToday(
+  file: RealizedTradesFile | null,
+  quotes: HoldingQuotesFile | null,
+): RealizedToday | null {
+  const trades = file?.trades ?? []
+  if (trades.length === 0) return null
+  const today = beijingToday()
+  const byCode = new Map((quotes?.quotes ?? []).map((q) => [q.code, q]))
+
+  let pnl = 0
+  let cash = 0
+  let hit = false
+  for (const t of trades) {
+    if (t.date !== today) continue
+    const shares = toNum(t.shares) ?? 0
+    const price = toNum(t.price) ?? 0
+    const fee = toNum(t.fee) ?? 0
+    if (shares <= 0 || price <= 0) continue
+
+    const dr = toNum(t.day_realized)
+    if (dr !== null) {
+      pnl += dr
+    } else {
+      const q = byCode.get(str(t.code))
+      const live = q && isNum(q.price) && q.price > 0 ? q.price : null
+      const prev = q && isNum(q.prev_close) && q.prev_close > 0 ? q.prev_close : null
+      if (live === null || prev === null) continue
+      pnl += shares * (live - prev) - fee
+    }
+    cash += shares * price - fee
+    hit = true
+  }
+  return hit ? { pnl, cash } : null
+}
+
 /* ------------------------------ 组合与分组汇总 ------------------------------ */
 
 export interface PortfolioTotals {
@@ -344,7 +441,7 @@ export interface PortfolioTotals {
   costValue: number
   pnl: number
   pnlPct: number
-  /** 今日盈亏合计；任一只有报价才计入，全无报价时为 null */
+  /** 今日盈亏合计（含当日已实现卖出，见 realizedToday）；任一只有报价或当日有卖出才计入，全无时为 null */
   todayPnl: number | null
   /**
    * 今日盈亏率（小数）= 今日盈亏 / **昨收**市值（除期初）。
@@ -371,14 +468,18 @@ export interface PortfolioTotals {
   best: HoldingCell | null
 }
 
-export function portfolioTotals(cells: HoldingCell[]): PortfolioTotals {
+export function portfolioTotals(cells: HoldingCell[], realized: RealizedToday | null = null): PortfolioTotals {
   const marketValue = cells.reduce((s, c) => s + c.marketValue, 0)
   const costValue = cells.reduce((s, c) => s + c.costValue, 0)
   const pnl = marketValue - costValue
   const withToday = cells.filter((c) => c.todayPnl !== null)
-  const todayPnl = withToday.length > 0 ? withToday.reduce((s, c) => s + (c.todayPnl ?? 0), 0) : null
-  // 昨收市值 = 当前市值 − 今日盈亏（份额不变，价格变动即当日盈亏）
-  const prevValue = todayPnl === null ? null : marketValue - todayPnl
+  const todayBase = withToday.length > 0 ? withToday.reduce((s, c) => s + (c.todayPnl ?? 0), 0) : null
+  // 当日有清仓卖出时，已实现盈亏并入今日盈亏——否则卖出当天这只「消失」会让今日盈亏
+  // 少算一块（市值凭空缩水），与券商 App 对不上。见 realized-trades.json 的说明。
+  const todayPnl = realized !== null ? (todayBase ?? 0) + realized.pnl : todayBase
+  // 昨收账户权益 = 当前市值 + 卖出净额 − 今日盈亏（含已实现）。
+  // 卖出净额计入分母：昨天那只还在账户里（按昨收计价），不能凭空少掉。
+  const prevValue = todayPnl === null ? null : marketValue + (realized?.cash ?? 0) - todayPnl
   const losersList = cells.filter((c) => c.pnl < 0)
   const winnersList = cells.filter((c) => c.pnl > 0)
   return {

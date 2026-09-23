@@ -11,10 +11,12 @@ import {
   buildCells,
   fetchHoldingQuotes,
   fetchHoldings,
+  fetchRealizedTrades,
   groupStats,
   portfolioTotals,
+  realizedToday,
 } from '../holdings'
-import type { HoldingQuotesFile, HoldingsFile } from '../holdings'
+import type { HoldingQuotesFile, HoldingsFile, RealizedTradesFile } from '../holdings'
 import { fetchHoldingsHistory } from '../holdingsHistory'
 import type { HoldingsHistory } from '../holdingsHistory'
 import { fmtNum, fmtPct, fmtSignedYuan, fmtYuan, trendClass } from '../format'
@@ -88,6 +90,8 @@ export default function HoldingsBoard() {
   const [refreshKey, setRefreshKey] = useState(0)
   /** 账户收益走势记录。null = 还没有任何记录（正常状态，非错误） */
   const [history, setHistory] = useState<HoldingsHistory | null>(null)
+  /** 已清仓卖出记录（realized-trades.json）。null = 没有这个文件 / 从没卖过，正常状态 */
+  const [tradesFile, setTradesFile] = useState<RealizedTradesFile | null>(null)
 
   // 静态快照：份额与成本
   useEffect(() => {
@@ -170,6 +174,15 @@ export default function HoldingsBoard() {
         .catch(() => {
           // 取不到就是「还没有记录」，渲染引导即可，不报错
         })
+      // 卖出记录是手工维护的低频文件，跟着收益记录一起慢轮询即可；
+      // 当日有清仓时，「今日盈亏」卡片要等它到齐才能与券商口径对上。
+      fetchRealizedTrades(controller.signal)
+        .then((f) => {
+          if (!controller.signal.aborted) setTradesFile(f)
+        })
+        .catch(() => {
+          // 文件不存在 = 没有卖出记录，正常状态
+        })
     }
     load()
     if (sessionState === 'closed') return () => controller.abort()
@@ -183,7 +196,9 @@ export default function HoldingsBoard() {
   const file = state.status === 'ready' ? state.file : null
 
   const cells = useMemo(() => (file ? buildCells(file, quotes) : []), [file, quotes])
-  const totals = useMemo(() => portfolioTotals(cells), [cells])
+  /** 当日已实现卖出 → 并入今日盈亏（清仓当天这只不在持仓里，不并就对不上券商） */
+  const realized = useMemo(() => realizedToday(tradesFile, quotes), [tradesFile, quotes])
+  const totals = useMemo(() => portfolioTotals(cells, realized), [cells, realized])
   /** 「距成本」的双向语义（亏损＝回本需涨 / 盈利＝可回撤），与表格、总览卡共用同一判定 */
   const be = breakevenOf(totals)
   const groups = useMemo(() => (file ? groupStats(cells, file.groups) : []), [cells, file])

@@ -15,6 +15,23 @@
 
 所以本脚本**只追加"当天"这一笔**，跑得越勤，曲线越完整。
 
+已实现卖出（清仓/减仓）怎么记账
+--------------------------------
+持仓卖出后就不在 holdings.json 里了，若不做处理，卖出当天的市值会**凭空缩水**
+（卖出所得现金没算进去），当日收益也会失真。所以脚本会读
+`public/realized-trades.json`（本地文件，不入库，手工维护）：
+
+    { "trades": [ { "date": "2026-01-15", "code": "159888",
+                    "name": "某示例ETF", "shares": 1000,
+                    "price": 1.500, "cost": 1.450,
+                    "fee": 0.15,              // 可选，默认 0
+                    "day_realized": 49.85     // 可选，券商App的当日已实现，填了优先用
+                  } ] }
+
+处理规则：卖出日 == 快照日（或落在断档区间）时——
+卖出净额（扣费）计入市值；卖出成本计回总投入（资金留在账户未取出）；
+已实现盈亏计入当日盈亏。更早的卖出视为已结算进历史，不重复计入。
+
 用法
 ----
     python3 scripts/record_holdings_snapshot.py          # 记录最近一个交易日的收盘
@@ -38,6 +55,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent          # market-dashboard/
 HOLDINGS = ROOT / "public" / "holdings.json"
 HISTORY = ROOT / "public" / "holdings-history.json"
+TRADES = ROOT / "public" / "realized-trades.json"      # 已清仓卖出记录（可选，本地文件）
 
 # 腾讯日K：一次取 5 根，够拿「最后一根」与「前一根」算当日盈亏。
 # **必须用不复权（末位参数留空）**：算持仓市值要的是真实成交价，前复权（qfq）会在
@@ -107,6 +125,26 @@ def load_history() -> dict:
     data["source"] = SOURCE
     data["note"] = NOTE
     return data
+
+
+def load_trades() -> list[dict]:
+    """读已清仓卖出记录（realized-trades.json）。文件不存在视为没有卖出。"""
+    if not TRADES.exists():
+        return []
+    try:
+        data = json.loads(TRADES.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as e:
+        die(f"{TRADES.name} 不是合法 JSON（{e}）。修好它再跑。")
+    trades = data.get("trades") or []
+    out = []
+    for t in trades:
+        if not isinstance(t, dict):
+            continue
+        for key in ("date", "code", "shares", "price", "cost"):
+            if key not in t:
+                die(f"{TRADES.name} 里有一条卖出记录缺字段 `{key}`（需 date/code/shares/price/cost）")
+        out.append(t)
+    return out
 
 
 def main() -> None:
@@ -202,6 +240,46 @@ def main() -> None:
         )
     trade_date = dates.pop()
     prev_date = sorted(prev_dates)[-1] if prev_dates else None
+
+    # ── 已实现卖出（realized-trades.json）────────────────────────────────
+    # 口径：卖出净额转为现金留在账户 → 计入市值；卖出成本计回总投入（钱没取出）；
+    # 已实现盈亏计入当日盈亏。适用范围：卖出日 == 快照日，或卖出日落在
+    # 「最后已记录日 ~ 快照日」的断档区间（补记时也要算进去）。
+    # 更早的卖出视为已结算进历史记录，不再重复计入。
+    last_rec = history["days"][-1]["date"] if history["days"] else None
+    applied = 0
+    for t in load_trades():
+        tdate = str(t["date"])
+        if not (tdate == trade_date or (last_rec or "") < tdate < trade_date):
+            if tdate > trade_date:
+                print(f"⚠️ 卖出记录 {t.get('name')}（{tdate}）晚于快照日 {trade_date}，本次未计入", file=sys.stderr)
+            continue
+        shares = float(t["shares"])
+        price = float(t["price"])
+        fee = float(t.get("fee") or 0.0)
+        total_mv += shares * price - fee          # 卖出净额 = 现金，计入账户市值
+        total_cost += shares * float(t["cost"])   # 总投入不变（资金留在账户内）
+        if "day_realized" in t:
+            day_pnl += float(t["day_realized"])   # 券商口径的当日已实现，优先采用
+        else:
+            try:
+                bars = fetch_closes(tencent_symbol(str(t["code"])))
+                closes = dict(bars)
+                if tdate != trade_date and last_rec and last_rec in closes:
+                    ref = last_rec                # 断档补记：与最后已记录日比，避免跨天重复
+                else:
+                    earlier = [d for d, _ in bars if d < tdate]
+                    ref = earlier[-1] if earlier else None
+                if ref is None:
+                    raise ValueError("取不到参考日收盘价")
+                day_pnl += shares * (price - closes[ref]) - fee
+            except Exception as e:
+                print(
+                    f"⚠️ 卖出记录 {t.get('name')}：当日已实现盈亏算不出（{e}），当日盈亏暂不含它",
+                    file=sys.stderr,
+                )
+        applied += 1
+        print(f"  ＋已实现卖出 {t.get('name')}（{tdate}）：{shares:,.0f} 股 @ {price}，净额 {shares*price-fee:+,.2f} 计入市值")
 
     pnl = total_mv - total_cost
     prior_value = total_mv - day_pnl           # 昨收市值

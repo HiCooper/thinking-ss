@@ -20,6 +20,7 @@
 > 以下文件**已被仓库根 `.gitignore` 忽略**，只在本地存在，处理方式同 `.env`：
 > `holdings.md`（真实持仓）、`market-dashboard/public/holdings.json`（它生成的快照）、
 > `market-dashboard/public/holdings-history.json`（账户每日收益记录）、
+> `market-dashboard/public/realized-trades.json`（已清仓卖出记录，供每日快照记账）、
 > `calibration-log.md`（校准日志，里面有持仓成本价与组合金额）。
 > 仓库里只有模板 **`holdings.example.md`**。
 >
@@ -69,11 +70,12 @@ market-dashboard/public/holdings-history.json ← 账户每日收益记录。**�
 | `plugin/localApi.ts` | 本地接口插件：`/api/spot`、`/api/holdings`、`/api/data-version` |
 | `scripts/export_data.py` | 大盘日频数据导出（含逐日缓存） |
 | `scripts/export_holdings.py` | `holdings.md` → `public/holdings.json`（两者都不入库） |
-| `scripts/record_holdings_snapshot.py` | 收盘后追加一笔**账户级**收益记录 → `public/holdings-history.json`（不入库） |
+| `scripts/record_holdings_snapshot.py` | 收盘后追加一笔**账户级**收益记录 → `public/holdings-history.json`（不入库）。清仓/减仓时读 `public/realized-trades.json` 把卖出净额计入市值、已实现盈亏计入当日盈亏（否则清仓当天市值凭空缩水） |
 | ↑ 的自动检查 | `npm start` 会调 `--if-due`：仅在「已收盘且今天没记录」时补记，盘中/非交易日跳过 |
 | `public/data.json` | 大盘日频数据（随仓库提交） |
 | `public/holdings.json` | 持仓快照（由脚本生成，**别手改**；**本地文件，不入库**） |
 | `public/holdings-history.json` | 账户每日收益记录（`npm run holdings:snapshot` 累积；**本地文件，不入库**） |
+| `public/realized-trades.json` | 已清仓卖出记录（**手工维护**，供上者记账；**本地文件，不入库**） |
 
 ---
 
