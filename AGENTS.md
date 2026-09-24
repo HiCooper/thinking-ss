@@ -318,7 +318,7 @@ python3 scripts/export_holdings.py --check  # 只校验不写文件
 | `src/format.ts` | **金额（元）一律精确到分**，走 `fmtYuan` / `fmtSignedYuan`；**不要**用 `fmtNum` / `fmtSigned` 直接格式化金额（那是展示偏好，金额位数是口径）。份额、单价（元/份）、收益率、`亿元`（成交额/两融/流通市值）与图表坐标轴刻度都不适用 |
 | `src/stats.ts` | 历史分位（百分位排名 + P20/P50/P80）。窗口取尾部 250 个**非 null** 值，样本 < 20 返回 `null`（小样本分位数是噪音）。分位带走 `chartTheme.percentileBand()`，用 `markArea`/`markLine` 而不是加数据线 |
 | `src/components/SummaryCards.tsx` | 四张卡，**顺序固定：成交额 → 杠杆率 → 两融 → 10Y 美债**。① 「最新交易日」已删（与小字说明重复）——不要把只有日期的卡加回来；② 科创50 也已删（底部常驻指数条里已有实时的）——**加任何卡前先确认底部条 / 实时面板 / 图里没有同一个读数**。杠杆率与两融**必须相邻**：同一分子的绝对规模 vs 相对拥挤度，实测分位相反（44% vs 73%），拆开就看不出对照。杠杆率的分子分母必须取**同一行**（跨日取会算出一个不存在的比率） |
-| `scripts/export_data.py` | **日K来源的列（`kospi` / `star50`）必须过 `kline_ok()`**：盘中刷新会拿到没走完的当日 K 线（实测 09:32 把 1623.06 写成当日值，真实收盘 1606.29）。当日不到 `KLINE_FINAL_MINUTES`（15:05）就置 `null`，与两融同一约定。新增日K来源的列时**照做** |
+| `scripts/export_data.py` | **日K来源的列（`kospi` / `star50`）必须过 `kline_ok()`**：盘中刷新会拿到没走完的当日 K 线（实测 09:32 把 1623.06 写成当日值，真实收盘 1606.29）。当日不到 `KLINE_FINAL_MINUTES`（15:05）就置 `null`，与两融同一约定。新增日K来源的列时**照做**。**指数序列还必须过 `clean_index()`**：上游会把最新一根的收盘写成 `0`（实测 2026-09-23 KOSPI，OHLC 与成交量都正常、只有 `c="0"`），而 `merge_series` 只跳过 `None`，`0` 会进缓存并盖掉已经修好的值 —— 入缓存前必须剔除 `≤0` 与 `NaN`。上游已修好、代码里仍暂留的逐日修正见 `KOSPI_REPAIR` |
 | `src/holdings.ts` | `GroupStat.pnlContribution` 是**有符号**的；新增派生指标时保持对正负都成立 |
 | `src/components/HoldingsStructureChart.tsx` | 发散条形图：`yAxis.axisLine.onZero = false` 让类目名贴左（否则压在负向条上），0 处靠 `markLine` 标出 |
 | `src/components/HoldingsPnlChart.tsx` | `xAxis` 的 `min/max` 必须同时覆盖正负；配色用 `chartTheme.pnlColor()` |
@@ -343,7 +343,11 @@ npm run data:validate   # 校验结果
 - 完全离线重建：`npm run data:refresh -- --offline`（用仓库里的 `scripts/.turnover_cache.json` 与 `.series_cache.json`）。
 - 数据是**增量**的：每天跑一次通常只抓 1 天，2–4 秒。跑完页面 ≤30 秒自动加载新数据（`/api/data-version` 轮询比对 mtime/size）。
 
-> 这个仓库**目前没有**任何 CI / 部署配置（没有 `.github/`，也没有 Pages 设置），跑起来只需要本地 `npm start`。
+> 仓库唯一的 CI 是 `.github/workflows/desktop-mac.yml`（macOS dmg 桌面版打包）。
+> **触发条件是 push 到 main 且改动涉及 `market-dashboard/**`** —— 所以「更新完数据就 push」会连带
+> 重打一次 dmg，并**覆盖更新**对外的滚动预发布 `desktop-latest`（用户从那下载，免登录）。
+> CI 不跑数据管线：`data.json` 直接打进包当基线，App 启动后再自己拉最新数据。
+> 除这个 workflow 外没有别的 CI / 部署配置（也没有 Pages 设置），跑看板只需要本地 `npm start`。
 > 不要凭空新增 CI、Actions 或部署流水线——用户没要求就不加。
 
 ---

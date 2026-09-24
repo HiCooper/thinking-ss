@@ -22,6 +22,7 @@
 """
 import argparse
 import json
+import math
 import sys
 import time
 import warnings
@@ -108,6 +109,25 @@ def beijing_now():
 def kline_ok(day: str, today: str, today_final: bool) -> bool:
     """日K来源的列在 `day` 这一行是否已定稿：非今天一律算定稿，今天要等过 15:05。"""
     return day != today or today_final
+
+
+def clean_index(raw):
+    """过滤指数序列里的非法点位（None / NaN / ≤ 0）。
+
+    指数点位不可能 ≤ 0。上游偶发把**最新一根**的收盘价写成 0（2026-09-23 KOSPI 实测：
+    OHLC 与成交量都正常，只有 c="0"），而 `merge_series` 只跳过 None —— 0 会被当成有效值
+    写进缓存，下一次抓取还会用 0 盖掉已经修好的值。故必须在入缓存前剔除；
+    顺带挡掉 pandas 可能产生的 NaN（它经 json.dumps 会写出非法的 `NaN` 字面量）。
+    """
+    out = {}
+    for d, v in raw.items():
+        try:
+            f = float(v)
+        except (TypeError, ValueError):
+            continue
+        if f > 0 and math.isfinite(f):
+            out[d] = f
+    return out
 
 
 def resolve_calendar(n, sc, offline):
@@ -199,6 +219,15 @@ def build_official(days, cache, offline):
 
 
 # ---------------- 各序列抓取器（均返回 {date: value}） ----------------
+# 上游已知缺口的**逐日修正**（配合 clean_index 使用；正常值一旦回来会被 merge_series 覆盖）：
+#   2026-09-23 KOSPI：新浪日线把收盘价写成 c="0"（open/high/low=7153.99/7153.99/7014.98、
+#   成交量 236996 都正常，只有收盘价缺失，且是它当时的最新一根）。
+#   取 KRX 官方收盘 7080.92 —— 由 Naver Finance 复核（closePriceRaw=7080.92，
+#   较前收 7017.91 上涨 63.01，与该接口其余各日同新浪逐日一致）。
+#   新浪修好后这一行即可删除。
+KOSPI_REPAIR = {"2026-09-23": 7080.92}
+
+
 def fetch_sina_bond(symbol):
     _require("requests", requests)
     data = requests.get(f"https://bond.finance.sina.com.cn/hq/gb/daily?symbol={symbol}",
@@ -231,18 +260,19 @@ def fetch_kospi():
     except Exception:
         df = ak.index_global_hist_em(symbol="韩国KOSPI")
         dates, closes = df["日期"], df["最新价"]
-    return dict(zip(pd.to_datetime(dates).dt.strftime("%Y-%m-%d"),
-                    pd.to_numeric(closes, errors="coerce").round(2)))
+    raw = dict(zip(pd.to_datetime(dates).dt.strftime("%Y-%m-%d"),
+                   pd.to_numeric(closes, errors="coerce").round(2)))
+    return clean_index({**raw, **KOSPI_REPAIR})
 
 
 def fetch_star50():
-    return {d: round(c, 2) for d, c in tx_daily("sh000688", 400)}
+    return clean_index({d: round(c, 2) for d, c in tx_daily("sh000688", 400)})
 
 
 def fetch_hs300():
     """沪深300 日K（腾讯，与科创50 同源同口径）。取 400 天：前端要算 MA60，
     窗口 250 天时给足前值，MA60 能从窗口起点就画出来（多的 150 天只进缓存不进输出）。"""
-    return {d: round(c, 2) for d, c in tx_daily("sh000300", 400)}
+    return clean_index({d: round(c, 2) for d, c in tx_daily("sh000300", 400)})
 
 
 # ---------------- 市场宽度（乐咕乐股）----------------
