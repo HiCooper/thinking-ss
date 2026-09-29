@@ -5,6 +5,7 @@
 #   market-dashboard/public/holdings.json  ← 上者生成的机器可读快照
 #   market-dashboard/public/holdings-history.json ← 账户每日收益记录
 #   market-dashboard/public/realized-trades.json  ← 已清仓卖出记录（供每日快照记账）
+#   market-dashboard/public/cash.json             ← 账户可用现金余额（含真实金额）
 #   calibration-log.md                     ← 校准日志（含持仓成本价与组合金额）
 #
 # 仓库里对应的模板 / 替代物：
@@ -34,6 +35,7 @@
 market-dashboard/public/holdings.json
 market-dashboard/public/holdings-history.json
 market-dashboard/public/realized-trades.json
+market-dashboard/public/cash.json
 
 # WorkBuddy agent 的本地工作数据（项目记忆 / 会话日志），只属于这台机器
 /.workbuddy/

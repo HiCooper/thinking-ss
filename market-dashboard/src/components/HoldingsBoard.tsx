@@ -9,6 +9,7 @@ import {
   HoldingsMissingError,
   breakevenOf,
   buildCells,
+  fetchCash,
   fetchHoldingQuotes,
   fetchHoldings,
   fetchRealizedTrades,
@@ -16,7 +17,12 @@ import {
   portfolioTotals,
   realizedToday,
 } from '../holdings'
-import type { HoldingQuotesFile, HoldingsFile, RealizedTradesFile } from '../holdings'
+import type {
+  CashFile,
+  HoldingQuotesFile,
+  HoldingsFile,
+  RealizedTradesFile,
+} from '../holdings'
 import { fetchHoldingsHistory } from '../holdingsHistory'
 import type { HoldingsHistory } from '../holdingsHistory'
 import { fmtNum, fmtPct, fmtSignedYuan, fmtYuan, trendClass } from '../format'
@@ -92,6 +98,8 @@ export default function HoldingsBoard() {
   const [history, setHistory] = useState<HoldingsHistory | null>(null)
   /** 已清仓卖出记录（realized-trades.json）。null = 没有这个文件 / 从没卖过，正常状态 */
   const [tradesFile, setTradesFile] = useState<RealizedTradesFile | null>(null)
+  /** 账户可用现金（cash.json，手工/AI 维护）。null = 还没维护过，现金卡不渲染 */
+  const [cashFile, setCashFile] = useState<CashFile | null>(null)
 
   // 静态快照：份额与成本
   useEffect(() => {
@@ -183,6 +191,14 @@ export default function HoldingsBoard() {
         .catch(() => {
           // 文件不存在 = 没有卖出记录，正常状态
         })
+      // 现金余额同样是手工维护的低频文件（买卖后更新），跟着一起慢轮询
+      fetchCash(controller.signal)
+        .then((c) => {
+          if (!controller.signal.aborted) setCashFile(c)
+        })
+        .catch(() => {
+          // 文件不存在 = 还没维护过现金，现金卡不渲染
+        })
     }
     load()
     if (sessionState === 'closed') return () => controller.abort()
@@ -195,10 +211,23 @@ export default function HoldingsBoard() {
 
   const file = state.status === 'ready' ? state.file : null
 
-  const cells = useMemo(() => (file ? buildCells(file, quotes) : []), [file, quotes])
-  /** 当日已实现卖出 → 并入今日盈亏（清仓当天这只不在持仓里，不并就对不上券商） */
+  /**
+   * 当日已实现卖出。两处用：
+   * - 减仓（卖了还剩）→ 并进那一行的今日盈亏，与券商「当日累计」口径对齐；
+   * - 清仓（已不在持仓）→ 没有行可并，由 portfolioTotals 兜底加进总额。
+   * 判据在 portfolioTotals 里，两处互斥，不会重复计。
+   */
   const realized = useMemo(() => realizedToday(tradesFile, quotes), [tradesFile, quotes])
-  const totals = useMemo(() => portfolioTotals(cells, realized), [cells, realized])
+  const cells = useMemo(
+    () => (file ? buildCells(file, quotes, realized?.soldByCode ?? null) : []),
+    [file, quotes, realized],
+  )
+  /** 可用现金；只进今日盈亏率的分母与现金卡展示，不改市值/盈亏口径 */
+  const cashBalance = cashFile && Number.isFinite(cashFile.balance) ? cashFile.balance : null
+  const totals = useMemo(
+    () => portfolioTotals(cells, realized, cashBalance),
+    [cells, realized, cashBalance],
+  )
   /** 「距成本」的双向语义（亏损＝回本需涨 / 盈利＝可回撤），与表格、总览卡共用同一判定 */
   const be = breakevenOf(totals)
   const groups = useMemo(() => (file ? groupStats(cells, file.groups) : []), [cells, file])
@@ -375,7 +404,13 @@ cd market-dashboard && npm run holdings:export`}</pre>
         </p>
       ) : null}
 
-      <HoldingsSummary cells={cells} totals={totals} quotes={quotes} />
+      <HoldingsSummary
+        cells={cells}
+        totals={totals}
+        quotes={quotes}
+        cash={cashFile}
+        realizedCash={realized?.cash ?? 0}
+      />
 
       <HoldingsTable cells={cells} groups={groups} />
 
@@ -438,6 +473,9 @@ cd market-dashboard && npm run holdings:export`}</pre>
           <>
             　·　今日 <span className={trendClass(totals.todayPnl)}>{fmtSignedYuan(totals.todayPnl)} 元</span>
           </>
+        ) : null}
+        {cashBalance !== null ? (
+          <>　·　账户总值（含现金）{fmtYuan(totals.marketValue + cashBalance)} 元</>
         ) : null}
       </p>
     </>

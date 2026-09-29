@@ -1,12 +1,16 @@
 import { useMemo } from 'react'
 import { fmtNum, fmtPct, fmtSignedYuan, fmtYuan, trendClass } from '../format'
 import { breakevenOf } from '../holdings'
-import type { HoldingCell, HoldingQuotesFile, PortfolioTotals } from '../holdings'
+import type { CashFile, HoldingCell, HoldingQuotesFile, PortfolioTotals } from '../holdings'
 
 interface HoldingsSummaryProps {
   cells: HoldingCell[]
   totals: PortfolioTotals
   quotes: HoldingQuotesFile | null
+  /** 账户可用现金。null = 还没维护 cash.json，此时不渲染现金卡（仍是四张竖排卡） */
+  cash: CashFile | null
+  /** 今日卖出净额（现金流入）。> 0 时在现金卡上说明这笔现金的来源 */
+  realizedCash?: number
 }
 
 interface Metric {
@@ -27,15 +31,79 @@ interface Metric {
  *
  * **这里没有「价格口径」卡**：报价时间、快照回退只数、降级原因已经在四处呈现，再占一张卡是重复——
  * 区块标题右侧的 `实时 · 时间` 标签、降级时的黄色提示条、明细表每行的快照小圆点、表格副标题说明。
- * 栅格是 4 列，4 张卡正好一行，与大盘看板一致。
+ * 栅格是 4 列，四张指标卡正好一行，与大盘看板一致。
+ *
+ * **现金卡与它们同款（小卡）**，排在「持仓市值」之前，占栅格第 1 列。
+ * 有现金时卡片是 5 张，所以这里给栅格加 `--five` 变 5 列，仍是一行；
+ * 没维护 `cash.json` 时它不出现，退回 4 张 / 4 列。
  */
-export default function HoldingsSummary({ cells, totals, quotes }: HoldingsSummaryProps) {
+export default function HoldingsSummary({
+  cells,
+  totals,
+  quotes,
+  cash,
+  realizedCash = 0,
+}: HoldingsSummaryProps) {
   const metrics = useMemo<Metric[]>(() => {
     const pnlPct100 = totals.pnlPct * 100
     const todayPct100 = totals.todayPnlPct === null ? null : totals.todayPnlPct * 100
     const be = breakevenOf(totals)
+    /**
+     * 账户总值 = 持仓市值 + 可用现金。
+     * 没维护现金时为 null —— 此时「总仓位」无从计算（不知道现金多少，就不能说有多满）。
+     */
+    const accountValue =
+      cash && Number.isFinite(cash.balance) ? totals.marketValue + cash.balance : null
+
+    /**
+     * 可用现金（通栏）。只在 cash.json 存在且余额有效时渲染。
+     *
+     * ⚠️ 现金**不并进市值/浮动盈亏**——并进去的话，账户里原有的现金会被当成利润
+     * （盈亏 = 总值 − 总投入，而总投入里没有对应的期初本金科目）。所以它只在这里展示，
+     * 外加作为「今日盈亏率」的分母使用（见 holdings.ts 的 portfolioTotals）。
+     */
+    const cashCard: Metric[] =
+      cash && Number.isFinite(cash.balance)
+        ? [
+            {
+              key: 'cash',
+              label: '可用现金',
+              value: fmtYuan(cash.balance),
+              unit: '元',
+              // 小卡横向空间有限，日期只留月日
+              hint: `更新于 ${cash.as_of.slice(5)}`,
+              // 现金既不是赚也不是亏，不上红绿
+              trend: null,
+              details: [
+                {
+                  label: '账户总值',
+                  text: fmtYuan(accountValue ?? totals.marketValue),
+                  title: '持仓市值 + 可用现金（资产口径，不是盈亏口径里的那个市值）',
+                },
+                {
+                  label: '占总资产',
+                  text: fmtPct(
+                    accountValue && accountValue > 0 ? (cash.balance / accountValue) * 100 : 0,
+                  ),
+                  title:
+                    '可用现金 / 账户总值。防守档时这个比例是要盯的数。注意现金不计入浮动盈亏 —— 并进去会让账户里原有的现金被算成利润',
+                },
+                ...(realizedCash > 0
+                  ? [
+                      {
+                        label: '今日卖出',
+                        text: `+${fmtYuan(realizedCash)}`,
+                        title: '今日卖出所得净额，已经包含在上面的可用现金里',
+                      },
+                    ]
+                  : []),
+              ],
+            },
+          ]
+        : []
 
     return [
+      ...cashCard,
       {
         key: 'mv',
         label: '持仓市值',
@@ -48,9 +116,24 @@ export default function HoldingsSummary({ cells, totals, quotes }: HoldingsSumma
             label: '今日盈亏',
             text: totals.todayPnl === null ? '—' : `${fmtSignedYuan(totals.todayPnl)} 元`,
             trend: totals.todayPnl,
-            title: '按现价相对昨收计算，仅统计有实时报价的持仓',
+            title:
+              '按现价相对昨收计算。**减仓标的含当日卖出部分的已实现盈亏**（券商当日累计口径：' +
+              '卖了的那部分今天也产生了盈亏，会计入当日）；清仓标的同样计入。未拿到实时报价的持仓不参与',
           },
           { label: '较持仓成本', text: fmtPct(pnlPct100), trend: totals.pnl },
+          // 总仓位 = 持仓市值 / 账户总值。没维护 cash.json 就算不出来（不知道现金多少
+          // 就不能说有多满），此时这一项不显示，而不是假装满仓 100%。
+          ...(accountValue !== null && accountValue > 0
+            ? [
+                {
+                  label: '总仓位',
+                  text: fmtPct((totals.marketValue / accountValue) * 100),
+                  title:
+                    `持仓市值 / 账户总值（持仓市值 + 可用现金 ${fmtYuan(cash?.balance ?? 0)}）。` +
+                    '与现金卡的「占总资产」互补，两者相加为 100%',
+                },
+              ]
+            : []),
         ],
       },
       {
@@ -127,10 +210,12 @@ export default function HoldingsSummary({ cells, totals, quotes }: HoldingsSumma
         ],
       },
     ]
-  }, [cells, totals, quotes])
+  }, [cells, totals, quotes, cash, realizedCash])
 
   return (
-    <div className="summary-grid">
+    // 有现金卡时是 5 张，用 5 列栅格让它们仍然排成一行；
+    // 没维护 cash.json 就退回 4 张、4 列（与大盘看板一致）。
+    <div className={`summary-grid${metrics.length > 4 ? ' summary-grid--five' : ''}`}>
       {metrics.map((m) => (
         <article className="card summary-card" key={m.key}>
           <div className="summary-card__label">

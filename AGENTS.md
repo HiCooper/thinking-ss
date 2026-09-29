@@ -12,6 +12,7 @@
 | 换自己的持仓 | 编辑仓库根 `holdings.md` → `cd market-dashboard && npm run holdings:export` |
 | 校验持仓文件 | `cd market-dashboard && python3 scripts/export_holdings.py --check` |
 | 校验大盘数据 | `cd market-dashboard && npm run data:validate` |
+| 收盘后与券商对账 | `cd market-dashboard && python3 scripts/reconcile_broker.py --today-pnl X --market-value Y`（参数可选，见 §B10） |
 
 **唯一硬前置是 Node**（`^20.19.0 || >=22.12.0`，见 `.nvmrc`）。看板本身**不需要 Python、不需要联网** —— `public/data.json` 随仓库提交，开箱即有行情数据。
 
@@ -21,6 +22,7 @@
 > `holdings.md`（真实持仓）、`market-dashboard/public/holdings.json`（它生成的快照）、
 > `market-dashboard/public/holdings-history.json`（账户每日收益记录）、
 > `market-dashboard/public/realized-trades.json`（已清仓卖出记录，供每日快照记账）、
+> `market-dashboard/public/cash.json`（账户可用现金余额）、
 > `calibration-log.md`（校准日志，里面有持仓成本价与组合金额）。
 > 仓库里只有模板 **`holdings.example.md`**。
 >
@@ -76,6 +78,7 @@ market-dashboard/public/holdings-history.json ← 账户每日收益记录。**�
 | `public/holdings.json` | 持仓快照（由脚本生成，**别手改**；**本地文件，不入库**） |
 | `public/holdings-history.json` | 账户每日收益记录（`npm run holdings:snapshot` 累积；**本地文件，不入库**） |
 | `public/realized-trades.json` | 已清仓卖出记录（**手工维护**，供上者记账；**本地文件，不入库**） |
+| `public/cash.json` | 账户可用现金余额（**手工维护**，现金卡用；**本地文件，不入库**）。口径见 §B9 |
 
 ---
 
@@ -278,6 +281,82 @@ python3 scripts/export_holdings.py --check  # 只校验不写文件
 
 `npm run holdings:export` 是**幂等**的：重复跑结果一样，可以放心重跑。
 
+### B8. 导入之后的买入/卖出怎么记（有固化 skill）
+
+用户随后的每笔买卖，走仓库内已固化的 skill：
+
+```
+.agents/skills/holdings-trade-bookkeeping/SKILL.md
+```
+
+它把口径写死了：卖出**不改**摊薄成本价、改份额必须同步改市值与盈亏、
+卖出必须追加 `public/realized-trades.json`（不写则清仓当天市值凭空缩水，且不报错）、
+买入才是加权摊薄，附命令清单与收工自查。**用户说「卖出 XX 多少份额、什么价位」时先加载它，别临场发挥。**
+
+> **换机器 clone 后要重建一次软链**，否则本机不会自动发现这个 skill
+> （WorkBuddy 只自动扫描 `.workbuddy/skills/`，而 `.workbuddy/` 整体不入库）：
+>
+> ```bash
+> mkdir -p .workbuddy/skills && ln -s ../../.agents/skills/holdings-trade-bookkeeping .workbuddy/skills/
+> ```
+
+### B9. 现金卡：可用现金放哪、为什么不算进盈亏
+
+`public/cash.json`（**手工维护，本地不入库**）存账户可用现金，看板据此渲染一张**通栏**现金卡
+（排在四张持仓指标卡之前，先给「还剩多少子弹」，再看持仓），并给出**账户总值 = 持仓市值 + 现金**。
+
+```json
+{ "as_of": "2026-01-15", "balance": 12345.67 }
+```
+
+`as_of` 是余额日期，`balance` 是可用现金。**没有这个文件 = 还没维护过，现金卡不渲染**（退回四张竖排卡），
+这是正常状态，不要为了"让它显示"去造一个。
+
+> #### ⚠️ 现金**不进**市值与浮动盈亏 —— 这是刻意的，别"好心"合并
+>
+> 账户总值若含现金，而总投入（持仓成本）里没有对应的**期初本金**科目，
+> 多出来的现金会被算成利润：余额里原有的那部分现金会凭空变成盈利，
+> 让浮亏看起来比实际小。**这不是精度问题，是符号级错误。**
+> 所以现金目前只用于两处：
+> 1. 现金卡展示（金额、占总资产比、账户总值）；
+> 2. 「今日盈亏率」的**分母**：昨收账户权益 = 当前市值 + 现金 − 今日盈亏
+>    （`holdings.ts` 的 `portfolioTotals`）。有 `cash.json` 时用它，没有才退回卖出净额。
+>
+> 想真正把现金并进口径，得先有「期初本金 + 出入金流水」，那是账本翻转的活（见 §3 结尾的讨论）。
+
+**维护时机**：每次买入/卖出后，按券商 App 的「可用资金」更新它——与跑
+`npm run holdings:export` 同一拍。卖出会让它变多、买入变少，忘了更新则现金占比失真。
+记账 skill（B8）里已把这一步列为收工自查项。
+
+---
+
+### B10. 收盘后与券商 App 对账
+
+**口径分歧是这里最常见的 bug，不是数据错误**。对账前先跑 `npm run holdings:snapshot`（15:05 后），
+再让脚本把「券商报的总数」和「看板自算的同一口径」摆在一起：
+
+```bash
+cd market-dashboard
+python3 scripts/reconcile_broker.py --market-value 123456.78 --cash 12345.67 \
+    --today-pnl -234.56 --pnl -89012.34       # 示例数字，换成券商 App 上的真实值
+```
+
+参数是券商 App 上的数字，**给几个对几个**（没给的项只显示看板自算值）。阈值 1 元 / 0.1%，
+超了会按下面三条顺序给排查建议。
+
+> #### 三条口径（对账前必须知道）
+>
+> 1. **今日盈亏是「当日累计」**：券商按**卖出前**份额算，卖掉的部分今天也产生盈亏、会计入当日。
+>    所以减仓当天 `剩余份额×(现价−昨收) + 卖出份额×(成交价−昨收)` 才等于券商数字，
+>    只看剩余份额**正好差一半**。
+> 2. **可用资金 ≠ 总资产**：券商「可用」通常不含未交收的在途资金。卖出当日先拿**总资产**
+>    对 `cash.json`，次日再用「可用」。
+> 3. **`day_realized` 填相对昨收，不是相对成本**（详见 B8 的 skill）。填错会让今日盈亏
+>    凭空多几千且不报错。
+
+脚本原理：读 `holdings.json` 拿份额/成本 + 抓收盘价 + 读 `realized-trades.json` 当日流水 + 读
+`cash.json`，自算六个指标再逐项比对。它**不改任何文件**，只读。
+
 ---
 
 ## 4. 硬约束（别踩的坑）
@@ -288,7 +367,7 @@ python3 scripts/export_holdings.py --check  # 只校验不写文件
 - **不要动 `market-dashboard/dist/`**：它在 `.gitignore` 里，是构建产物。
 - **改完跑 `npm run typecheck`**（`npm run build` 已包含）。`tsconfig` 开了 `strict` + `noUnusedLocals`。
 - **绝不提交 `holdings.md`、`public/holdings.json`、`public/holdings-history.json`、
-  `calibration-log.md`**：
+  `public/realized-trades.json`、`public/cash.json`、`calibration-log.md`**：
   它们含真实持仓、成本、金额与分组构成，
   已被 `.gitignore` 忽略。不要用 `git add -f` 绕过；也不要把真实数字抄进任何会入库的文件
   （示例一律用编造数据）。**这些文件曾误入历史并被 `git filter-branch` 清除过一次，别再犯。**

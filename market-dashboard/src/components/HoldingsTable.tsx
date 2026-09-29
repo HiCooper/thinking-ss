@@ -81,10 +81,21 @@ const COLUMNS: Column[] = [
     key: 'todayPnl',
     label: '今日盈亏',
     numeric: true,
-    title: '份额 ×（现价 − 昨收），单位：元；无实时报价时为「—」',
+    title:
+      '当日累计口径：剩余份额 ×（现价 − 昨收）＋ 当日卖出部分相对昨收的已实现盈亏，单位：元。与券商 App 一致（券商按卖出前份额计）；无实时报价时为「—」',
     render: (c) => (
       <span className={trendClass(c.todayPnl)}>
         {c.todayPnl === null ? '—' : fmtSignedYuan(c.todayPnl)}
+        {c.soldSharesToday > 0 ? (
+          <em
+            className="holdings-sold-today"
+            title={`含今日卖出 ${c.soldSharesToday.toLocaleString()} 份相对昨收的已实现盈亏 ${fmtSignedYuan(
+              c.soldPnlByCode,
+            )}，与券商 App 的当日累计口径一致`}
+          >
+            卖
+          </em>
+        ) : null}
       </span>
     ),
   },

@@ -204,6 +204,11 @@
   gap: 14px;
 }
 
+/* 持仓看板加了「可用现金」卡后是 5 张：改 5 列，让它仍与其余四张同一行 */
+.summary-grid--five {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
 .summary-card {
   padding: 14px 16px 12px;
   display: flex;
@@ -874,6 +879,13 @@ code {
 }
 
 /* ============================ 响应式 ============================ */
+/* 五张卡在 1080–1280px 之间会挤到放不下千分位数字（每卡 <200px），先降成 3 列 */
+@media (max-width: 1280px) {
+  .summary-grid--five {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
 @media (max-width: 1080px) {
   .summary-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1219,6 +1231,21 @@ code {
   border-radius: 50%;
   background: #aab6c6;
   vertical-align: middle;
+}
+
+/* 「今日卖过」角标：该行今日盈亏已含当日卖出部分的已实现盈亏（券商当日累计口径） */
+.holdings-sold-today {
+  display: inline-block;
+  margin-left: 5px;
+  padding: 0 4px;
+  border: 1px solid currentcolor;
+  border-radius: 3px;
+  font-size: 10px;
+  font-style: normal;
+  line-height: 15px;
+  opacity: 0.72;
+  vertical-align: middle;
+  cursor: help;
 }
 
 .holdings-snap-dot--inline {
