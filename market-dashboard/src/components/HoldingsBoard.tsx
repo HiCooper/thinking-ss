@@ -8,6 +8,7 @@ import HoldingsPnlTrendChart from './HoldingsPnlTrendChart'
 import {
   HoldingsMissingError,
   breakevenOf,
+  dilutedView,
   buildCells,
   fetchCash,
   fetchHoldingQuotes,
@@ -16,6 +17,7 @@ import {
   groupStats,
   portfolioTotals,
   realizedToday,
+  realizedCumulative,
 } from '../holdings'
 import type {
   CashFile,
@@ -100,11 +102,22 @@ export default function HoldingsBoard() {
   const [tradesFile, setTradesFile] = useState<RealizedTradesFile | null>(null)
   /** 账户可用现金（cash.json，手工/AI 维护）。null = 还没维护过，现金卡不渲染 */
   const [cashFile, setCashFile] = useState<CashFile | null>(null)
+  /**
+   * 低频辅助文件（现金 / 卖出记录 / 收益记录）的**首次**加载是否已落定（成功或「文件不存在」都算）。
+   *
+   * 落定前不渲染总览卡。否则 `holdings.json` 先到、页面按 4 张卡画一帧，
+   * 等 cash.json 回来再补成 5 张；更糟的是「总盈亏」会先显示纯浮动、再跳成含已实现
+   * （−19.73% → −21.84%），看着像数据在抖，其实是同一份数据的两个口径。
+   * 这三个文件都是本地静态小文件，与 holdings.json 并发拉，多等的这一帧可以忽略。
+   */
+  const [supplementsReady, setSupplementsReady] = useState(false)
 
   // 静态快照：份额与成本
   useEffect(() => {
     const controller = new AbortController()
     setState({ status: 'loading' })
+    // 整页重载时，低频文件那组也要重新等一次（它们的 effect 依赖 reloadKey，会重跑）
+    setSupplementsReady(false)
     fetchHoldings(controller.signal)
       .then((file) => {
         if (!controller.signal.aborted) setState({ status: 'ready', file })
@@ -123,10 +136,9 @@ export default function HoldingsBoard() {
   }, [reloadKey])
 
   // 实时报价：轮询；接口不可用（静态部署）时静默保持 null
-  /** 最近一次响应里的交易时段。**ref 给轮询链用**（闭包里必须拿到最新值），
-   *  **state 给收益记录那个 effect 用**（时段变化时要重新决定还轮不轮）。 */
+  /** 实时报价最近一次返回的交易时段。**只留 ref**：它决定的是「还要不要轮询」，
+   *  不参与渲染；放进 state 依赖会让低频文件那组请求在时段变化时中止重跑（见下面 effect）。 */
   const sessionStateRef = useRef<string | null>(null)
-  const [sessionState, setSessionState] = useState<string | null>(null)
 
   const loadQuotes = useCallback(async (signal: AbortSignal) => {
     const data = await fetchHoldingQuotes(signal)
@@ -134,7 +146,6 @@ export default function HoldingsBoard() {
     sessionStateRef.current = data?.session.state ?? null
     setQuotes(data)
     setQuotesLoaded(true)
-    setSessionState(data?.session.state ?? null)
   }, [])
 
   useEffect(() => {
@@ -171,43 +182,52 @@ export default function HoldingsBoard() {
   // 启动时 `--if-due` 自动补记的那一笔会被自动加载，不必手动刷新页面。
   //
   // 收盘后**连它一起停**：记录是日频的，整晚复查也等不到新数据，纯空转。
-  // 依赖 sessionState —— 时段变化（含切到 closed）时重建一次，顺便立刻复查一次。
+  // 停的方式是在 interval 回调里读 `sessionStateRef` 跳过，而不是把时段做成依赖
+  // （那样会中止在途请求重跑，造成卡片数量闪烁，见下面的说明）。
   useEffect(() => {
     const controller = new AbortController()
-    const load = () => {
-      fetchHoldingsHistory(controller.signal)
-        .then((h) => {
+    let alive = true
+
+    // 三个都是低频文件，并发拉。allSettled 而不是 all：「文件不存在」是正常状态，
+    // 不能让其中一个 404 把另外两个的结果也丢了。
+    const load = async () => {
+      await Promise.allSettled([
+        fetchHoldingsHistory(controller.signal).then((h) => {
           if (!controller.signal.aborted) setHistory(h)
-        })
-        .catch(() => {
-          // 取不到就是「还没有记录」，渲染引导即可，不报错
-        })
-      // 卖出记录是手工维护的低频文件，跟着收益记录一起慢轮询即可；
-      // 当日有清仓时，「今日盈亏」卡片要等它到齐才能与券商口径对上。
-      fetchRealizedTrades(controller.signal)
-        .then((f) => {
+        }),
+        // 卖出记录是手工维护的低频文件；当日有清仓时「今日盈亏」要等它到齐，
+        // 有累计卖出时「总盈亏」也要靠它才能对上券商的摊薄成本口径。
+        fetchRealizedTrades(controller.signal).then((f) => {
           if (!controller.signal.aborted) setTradesFile(f)
-        })
-        .catch(() => {
-          // 文件不存在 = 没有卖出记录，正常状态
-        })
-      // 现金余额同样是手工维护的低频文件（买卖后更新），跟着一起慢轮询
-      fetchCash(controller.signal)
-        .then((c) => {
+        }),
+        // 现金余额同样是手工维护的低频文件（买卖后更新）
+        fetchCash(controller.signal).then((c) => {
           if (!controller.signal.aborted) setCashFile(c)
-        })
-        .catch(() => {
-          // 文件不存在 = 还没维护过现金，现金卡不渲染
-        })
+        }),
+      ])
+      if (alive && !controller.signal.aborted) setSupplementsReady(true)
     }
-    load()
-    if (sessionState === 'closed') return () => controller.abort()
-    const id = window.setInterval(load, HISTORY_POLL_MS)
+
+    void load()
+    /**
+     * 收盘后不再空转：日频文件整晚复查也等不到新数据。
+     *
+     * ⚠️ 用 ref 判断，**不要把 sessionState 放进依赖**——时段要等第一拍报价回来才知道，
+     * 放进依赖会让 cleanup 中止**已经发出**的现金/卖出记录请求并重跑一次。
+     * 后果正是那个闪烁：`holdings.json` 早已就绪、页面先按 4 张卡画一帧，
+     * 等重跑的 cash.json 回来才补成 5 张，同时「总盈亏」从纯浮动跳成含已实现。
+     * 改成 interval 里读 ref 跳过，既保留「收盘不空转」，又不会打断在途请求。
+     */
+    const id = window.setInterval(() => {
+      if (sessionStateRef.current === 'closed') return
+      void load()
+    }, HISTORY_POLL_MS)
     return () => {
+      alive = false
       window.clearInterval(id)
       controller.abort()
     }
-  }, [sessionState, refreshKey])
+  }, [reloadKey, refreshKey])
 
   const file = state.status === 'ready' ? state.file : null
 
@@ -218,6 +238,11 @@ export default function HoldingsBoard() {
    * 判据在 portfolioTotals 里，两处互斥，不会重复计。
    */
   const realized = useMemo(() => realizedToday(tradesFile, quotes), [tradesFile, quotes])
+  /**
+   * 累计已实现盈亏（相对成本，跨全部卖出记录）——用于对上券商两融的「持仓盈亏」。
+   * 与上面的 realized（当日、相对昨收）是两个口径，别混。
+   */
+  const realizedTotal = useMemo(() => realizedCumulative(tradesFile), [tradesFile])
   const cells = useMemo(
     () => (file ? buildCells(file, quotes, realized?.soldByCode ?? null) : []),
     [file, quotes, realized],
@@ -230,9 +255,16 @@ export default function HoldingsBoard() {
   )
   /** 「距成本」的双向语义（亏损＝回本需涨 / 盈利＝可回撤），与表格、总览卡共用同一判定 */
   const be = breakevenOf(totals)
+  /**
+   * 摊薄成本视图（券商两融口径）。页脚与主卡片必须同源，否则
+   * 「卡片说亏 9.2 万、页脚说亏 8.1 万」——同一个页面自相矛盾，比口径差更糟。
+   */
+  const dv = dilutedView(totals, realizedTotal)
   const groups = useMemo(() => (file ? groupStats(cells, file.groups) : []), [cells, file])
 
-  if (state.status === 'loading') {
+  // 「文件不存在 / 报错」不在这个门后面 —— 那种情况要立刻给指引，不能让人干等。
+  // 只把「已就绪但辅助文件还没落定」挡住，避免卡片数量与总盈亏口径各跳一次。
+  if (state.status === 'loading' || (state.status === 'ready' && !supplementsReady)) {
     return (
       <div className="state-panel card">
         <div className="spinner" aria-hidden="true" />
@@ -410,6 +442,7 @@ cd market-dashboard && npm run holdings:export`}</pre>
         quotes={quotes}
         cash={cashFile}
         realizedCash={realized?.cash ?? 0}
+        realizedTotal={realizedTotal}
       />
 
       <HoldingsTable cells={cells} groups={groups} />
@@ -464,10 +497,19 @@ cd market-dashboard && npm run holdings:export`}</pre>
       </div>
 
       <p className="footnote">
-        合计：市值 {fmtYuan(totals.marketValue)} 元　·　成本 {fmtYuan(totals.costValue)} 元　·　浮动盈亏{' '}
-        <span className={trendClass(totals.pnl)}>{fmtSignedYuan(totals.pnl)} 元</span>
-        （{fmtPct(totals.pnlPct * 100)}）　·　{be.kind === 'recover' ? '回本需涨 ' : '可回撤 '}
-        {be.kind === 'recover' ? fmtPct(be.pct * 100, 1) : `${fmtNum(be.pct * 100, 1)}%`}　·　亏损 / 盈利{' '}
+        合计：市值 {fmtYuan(totals.marketValue)} 元　·　成本 {fmtYuan(dv?.dilutedCost ?? totals.costValue)} 元　·
+        {dv ? '总盈亏（含已实现）' : '浮动盈亏'}{' '}
+        <span className={trendClass(dv?.totalPnl ?? totals.pnl)}>
+          {fmtSignedYuan(dv?.totalPnl ?? totals.pnl)} 元
+        </span>
+        （{fmtPct((dv?.pct ?? totals.pnlPct) * 100)}）　·
+        {dv ? (dv.breakevenPct > 0 ? '回本需涨 ' : '可回撤 ') : be.kind === 'recover' ? '回本需涨 ' : '可回撤 '}
+        {dv
+          ? fmtPct(Math.abs(dv.breakevenPct) * 100, 1)
+          : be.kind === 'recover'
+            ? fmtPct(be.pct * 100, 1)
+            : `${fmtNum(be.pct * 100, 1)}%`}
+        　·　亏损 / 盈利{' '}
         {totals.losers} / {totals.winners} 只
         {totals.todayPnl !== null ? (
           <>

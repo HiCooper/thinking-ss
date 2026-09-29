@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { fmtNum, fmtPct, fmtSignedYuan, fmtYuan, trendClass } from '../format'
-import { breakevenOf } from '../holdings'
+import { breakevenOf, dilutedView } from '../holdings'
 import type { CashFile, HoldingCell, HoldingQuotesFile, PortfolioTotals } from '../holdings'
 
 interface HoldingsSummaryProps {
@@ -11,6 +11,12 @@ interface HoldingsSummaryProps {
   cash: CashFile | null
   /** 今日卖出净额（现金流入）。> 0 时在现金卡上说明这笔现金的来源 */
   realizedCash?: number
+  /**
+   * **累计**已实现盈亏（相对成本，跨全部卖出记录）。null = 从没卖过。
+   * 两融券商的「持仓盈亏」是摊薄成本口径 = 我们的浮动盈亏 + 这一块，
+   * 所以要在浮动盈亏卡上显式给出，否则拿券商数字对账会永远差一截。
+   */
+  realizedTotal?: number | null
 }
 
 interface Metric {
@@ -43,11 +49,34 @@ export default function HoldingsSummary({
   quotes,
   cash,
   realizedCash = 0,
+  realizedTotal = null,
 }: HoldingsSummaryProps) {
   const metrics = useMemo<Metric[]>(() => {
     const pnlPct100 = totals.pnlPct * 100
     const todayPct100 = totals.todayPnlPct === null ? null : totals.todayPnlPct * 100
     const be = breakevenOf(totals)
+
+    /**
+     * **总盈亏 = 浮动盈亏 + 累计已实现**（券商两融「摊薄成本」口径）。
+     *
+     * 有卖出记录时，下面那张卡的主数字用这个，不用纯浮动：
+     * 纯浮动会**系统性低估亏损**——卖得越多，已实现亏损越多，低估越严重。
+     * 而这个是券商 App 上显示的那位，可以直接对账。
+     */
+    /** 摊薄成本视图（券商两融口径）。从没卖过时为 null，此时卡片退回纯浮动口径 */
+    const dv = dilutedView(totals, realizedTotal ?? null)
+    const hasRealized = dv !== null
+    const realizedVal = realizedTotal ?? 0
+    const totalPnl = dv?.totalPnl ?? totals.pnl
+    const dilutedCost = dv?.dilutedCost ?? totals.costValue
+    const totalPct100 = (dv?.pct ?? totals.pnlPct) * 100
+    /** 回本需涨也按摊薄成本算，否则会与主数字自相矛盾（亏 9 万却说只需涨 24%） */
+    const beKind: 'recover' | 'cushion' = dv
+      ? dv.breakevenPct > 0
+        ? 'recover'
+        : 'cushion'
+      : be.kind
+    const bePct = dv ? Math.abs(dv.breakevenPct) : be.pct
     /**
      * 账户总值 = 持仓市值 + 可用现金。
      * 没维护现金时为 null —— 此时「总仓位」无从计算（不知道现金多少，就不能说有多满）。
@@ -145,16 +174,35 @@ export default function HoldingsSummary({
         trend: null,
         details: [
           {
-            label: be.kind === 'recover' ? '回本需涨' : '可回撤',
+            label: beKind === 'recover' ? '回本需涨' : '可回撤',
             // 亏损时带符号（+22.7% 表示还需上涨）；盈利时是「安全垫」，不加正号更自然
-            text: be.kind === 'recover' ? fmtPct(be.pct * 100) : `${fmtNum(be.pct * 100, 1)}%`,
+            text: beKind === 'recover' ? fmtPct(bePct * 100) : `${fmtNum(bePct * 100, 1)}%`,
             // 中性：需涨/可跌是两个方向的「缺口」，用红绿都会被误读成当日涨跌
             trend: null,
-            title:
-              be.kind === 'recover'
+            title: hasRealized
+              ? '（摊薄成本额 − 市值）/ 市值：市值涨到这里，加上手上的现金正好等于累计投入本金。' +
+                '分母用摊薄成本而不是原成本，才和「总盈亏」那张卡对得上'
+              : be.kind === 'recover'
                 ? '（成本 − 市值）/ 市值：现有持仓要回到成本价所需要的涨幅'
                 : '组合整体已高于成本，这是回到成本前可承受的回撤幅度',
           },
+          /**
+           * 摊薄成本额 = 持仓成本 − 累计已实现。券商两融卖出后把已实现盈亏摊进剩余持仓的成本价，
+           * 所以它的成本比我们的高（亏着卖 → 成本被摊高）。「总盈亏」卡的盈亏率用的就是这个分母，
+           * 放在这里是为了让那个率可以被复算，不变成黑箱。
+           */
+          ...(hasRealized
+            ? [
+                {
+                  label: '摊薄后',
+                  text: fmtYuan(dilutedCost),
+                  title:
+                    '券商两融口径的持仓成本额 = 持仓成本 − 累计已实现。' +
+                    '卖出亏损会把它摊高，卖出盈利会摊低。' +
+                    '市值涨到这个数 + 手上的现金 = 累计投入本金（真正回本）',
+                },
+              ]
+            : []),
           {
             label: '亏损 / 盈利',
             text: `${totals.losers} / ${totals.winners} 只`,
@@ -163,12 +211,44 @@ export default function HoldingsSummary({
       },
       {
         key: 'pnl',
-        label: '浮动盈亏',
-        value: fmtSignedYuan(totals.pnl),
+        /**
+         * 主数字用「总盈亏」（浮动 + 累计已实现），浮动那块降级到明细里。
+         * 见上面 `hasRealized` 处的说明：纯浮动会系统性低估亏损。
+         */
+        label: hasRealized ? '总盈亏' : '浮动盈亏',
+        value: fmtSignedYuan(hasRealized ? totalPnl : totals.pnl),
         unit: '元',
-        trend: totals.pnl,
+        hint: hasRealized ? '含已实现' : undefined,
+        trend: hasRealized ? totalPnl : totals.pnl,
         details: [
-          { label: '盈亏率', text: fmtPct(pnlPct100), trend: totals.pnl },
+          {
+            label: '盈亏率',
+            text: fmtPct(hasRealized ? totalPct100 : pnlPct100),
+            trend: hasRealized ? totalPnl : totals.pnl,
+            title: hasRealized
+              ? `总盈亏 / 摊薄成本额（${fmtYuan(dilutedCost)}）。券商两融口径：卖出把已实现盈亏` +
+                '摊进剩余持仓的成本价，所以它 = 持仓成本 − 累计已实现。' +
+                '这个率与券商 App 上的持仓盈亏率同源，可以直接对'
+              : '浮动盈亏 / 持仓成本',
+          },
+          ...(hasRealized
+            ? [
+                {
+                  label: '其中浮动',
+                  text: fmtSignedYuan(totals.pnl),
+                  trend: totals.pnl,
+                  title: '当前还持有的份额，按原成本价算的浮动盈亏（不含已卖出的部分）',
+                },
+                {
+                  label: '其中已实现',
+                  text: fmtSignedYuan(realizedVal),
+                  trend: realizedVal,
+                  title:
+                    '累计卖出相对成本的盈亏（含费）。券商把它摊进了剩余持仓的成本价，' +
+                    '所以这笔钱已经体现为成本变高，不会再单独出现在券商的持仓盈亏里',
+                },
+              ]
+            : []),
           {
             label: '最大亏损',
             text: totals.worst ? `${totals.worst.name} ${fmtSignedYuan(totals.worst.pnl)}` : '—',
@@ -177,14 +257,17 @@ export default function HoldingsSummary({
               ? `${totals.worst.name}（${totals.worst.code}）浮动盈亏 ${fmtSignedYuan(totals.worst.pnl)} 元`
               : '当前没有亏损中的持仓',
           },
-          {
-            label: '最大盈利',
-            text: totals.best ? `${totals.best.name} ${fmtSignedYuan(totals.best.pnl)}` : '—',
-            trend: totals.best ? totals.best.pnl : null,
-            title: totals.best
-              ? `${totals.best.name}（${totals.best.code}）浮动盈亏 ${fmtSignedYuan(totals.best.pnl)} 元`
-              : '当前没有盈利中的持仓',
-          },
+          // 全仓皆亏时「最大盈利 —」只是噪音，这一行仅在真有盈利持仓时出现
+          ...(totals.best
+            ? [
+                {
+                  label: '最大盈利',
+                  text: `${totals.best.name} ${fmtSignedYuan(totals.best.pnl)}`,
+                  trend: totals.best.pnl,
+                  title: `${totals.best.name}（${totals.best.code}）浮动盈亏 ${fmtSignedYuan(totals.best.pnl)} 元`,
+                },
+              ]
+            : []),
         ],
       },
       {
@@ -210,7 +293,7 @@ export default function HoldingsSummary({
         ],
       },
     ]
-  }, [cells, totals, quotes, cash, realizedCash])
+  }, [cells, totals, quotes, cash, realizedCash, realizedTotal])
 
   return (
     // 有现金卡时是 5 张，用 5 列栅格让它们仍然排成一行；

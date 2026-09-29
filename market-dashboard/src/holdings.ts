@@ -372,6 +372,11 @@ export interface RealizedTrade {
   fee?: number
   /** 券商口径的当日已实现盈亏（含费）；填了就优先用它，否则用实时报价现算 */
   day_realized?: number
+  /**
+   * 这笔卖出相对**成本**的累计盈亏（含费）。纯记录，脚本不读——
+   * 只是给「券商摊薄成本口径」对账时留个底。
+   */
+  pnl_vs_cost?: number
 }
 
 export interface RealizedTradesFile {
@@ -509,6 +514,38 @@ export function realizedToday(
   return hit ? { pnl, cash, soldByCode } : null
 }
 
+/**
+ * **累计**已实现盈亏（相对**成本**，跨所有日期的卖出流水）。
+ *
+ * 与 `realizedToday` 是两回事：那个是「当日」盈亏（相对昨收），进今日盈亏；
+ * 这个是「从头到尾」的盈亏（相对成本），用于对上券商的「持仓盈亏」。
+ *
+ * 为什么要它：两融账户的券商 App 用**摊薄成本**——卖出后把已实现盈亏摊进剩余持仓的
+ * 成本价（成本价 = (累计买入额 − 累计卖出额) / 剩余份额），所以它的「持仓盈亏」
+ * = 剩余市值 − 摊薄后成本额 = **浮动盈亏 + 累计已实现**。
+ * 我们这边成本价卖出后不变，已实现是单列的，两边差的就是这一块，且**逐笔累积、永久存在**。
+ * 不把它显式呈现，boss 拿券商数字对账就会永远差一截，还以为数据错了。
+ *
+ * null = 没有卖出记录（正常状态）。
+ */
+export function realizedCumulative(file: RealizedTradesFile | null): number | null {
+  const trades = file?.trades ?? []
+  if (trades.length === 0) return null
+  let sum = 0
+  let hit = false
+  for (const t of trades) {
+    const shares = toNum(t.shares) ?? 0
+    const price = toNum(t.price) ?? 0
+    const cost = toNum(t.cost) ?? 0
+    if (shares <= 0 || price <= 0 || cost <= 0) continue
+    const vc = toNum(t.pnl_vs_cost)
+    // pnl_vs_cost 已含费；没填就现算（fee 默认 0）
+    sum += vc !== null ? vc : shares * (price - cost) - (toNum(t.fee) ?? 0)
+    hit = true
+  }
+  return hit ? sum : null
+}
+
 /* ------------------------------ 组合与分组汇总 ------------------------------ */
 
 export interface PortfolioTotals {
@@ -614,6 +651,49 @@ export function breakevenOf(v: { pnl: number; breakevenPct: number }): {
   return v.pnl < 0
     ? { kind: 'recover', pct: Math.abs(v.breakevenPct) }
     : { kind: 'cushion', pct: Math.abs(v.breakevenPct) }
+}
+
+/**
+ * **摊薄成本视图**（券商两融口径）。`realizedCum` 为 null（从没卖过）时返回 null。
+ *
+ * 两融账户卖出后，券商把已实现盈亏摊进**剩余持仓的成本价**，于是：
+ *
+ * ```
+ * 摊薄成本额 = 持仓成本 − 累计已实现      （亏着卖 → 成本被摊高；赚着卖 → 摊低）
+ * 总盈亏     = 浮动盈亏 + 累计已实现      （= 券商的「持仓盈亏」）
+ * ```
+ *
+ * 为什么主数字要用这个而不是纯浮动：纯浮动会**系统性低估亏损**——
+ * 卖得越多，已实现亏损越多，低估越严重。而这个正是券商 App 上显示的那位，能直接对账。
+ *
+ * 回本涨幅也按摊薄成本算才自洽：市值涨到摊薄成本额，加上手上的现金 = 累计投入本金（真回本）。
+ * 若仍按原成本算，会出现「总亏 9 万却说只需涨 24%」这种自相矛盾的读数。
+ *
+ * 抽成函数是为了让总览卡和页脚用同一套算式，不各写一遍而漂移。
+ */
+export function dilutedView(
+  totals: { pnl: number; costValue: number; marketValue: number },
+  realizedCum: number | null,
+): {
+  /** 总盈亏 = 浮动 + 累计已实现 */
+  totalPnl: number
+  /** 摊薄成本额 = 持仓成本 − 累计已实现 */
+  dilutedCost: number
+  /** 总盈亏 / 摊薄成本额（小数） */
+  pct: number
+  /** （摊薄成本额 − 市值）/ 市值（小数），正数＝还需上涨 */
+  breakevenPct: number
+} | null {
+  if (realizedCum === null || !Number.isFinite(realizedCum)) return null
+  const totalPnl = totals.pnl + realizedCum
+  const dilutedCost = totals.costValue - realizedCum
+  return {
+    totalPnl,
+    dilutedCost,
+    pct: dilutedCost > 0 ? totalPnl / dilutedCost : 0,
+    breakevenPct:
+      totals.marketValue > 0 ? (dilutedCost - totals.marketValue) / totals.marketValue : 0,
+  }
 }
 
 export interface GroupStat {
