@@ -8,9 +8,7 @@
  *
  * 本模块是**框架无关**的 API 核心：导出 `createApiMiddleware(dataFiles, holdingsFiles)`，
  * 返回一个 `(req, res, next)` 形状的 Node 中间件（兼容 Connect / node:http）。
- * 两个宿主共用同一份抓取与解析逻辑：
- *   - Web 版：plugin/localApi.ts 把它挂到 Vite dev / preview server 上（`npm start`）
- *   - 桌面版：electron/main.ts 把它挂到自起的 http server 上（Electron 打包）
+ * 宿主只有一个：plugin/localApi.ts 把它挂到 Vite dev / preview server 上（`npm start`）。
  *
  * 本项目没装独立的 http 类型依赖，req/res 按结构声明用得到的字段即可
  * （Connect 与 node:http 都满足同一形状）。
@@ -808,7 +806,8 @@ let fsPromise: Promise<FsLike | null> | null = null
 /**
  * 取 `node:fs`。本项目没有装 @types/node（装了也只为这一处），
  * 所以用**变量说明符**动态 import：TS 不会去解析 `node:` 模块因而不会报 TS2307，
- * esbuild 也会原样保留这行 import，运行时在 Node 里正常解析；也不需要新增任何依赖。
+ * 打包器也会原样保留这行 import（配合 `@vite-ignore`），运行时在 Node 里正常解析；
+ * 也不需要新增任何依赖。
  */
 function loadFs(): Promise<FsLike | null> {
   if (!fsPromise) {

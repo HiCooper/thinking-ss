@@ -1,7 +1,7 @@
 /**
  * Vite 插件封装：把 server/apiCore.ts 的框架无关中间件挂到 Vite dev / preview server 上。
  *
- * 所有抓取与解析逻辑都在 server/apiCore.ts（桌面版 Electron 主进程复用同一份），
+ * 所有抓取与解析逻辑都在 server/apiCore.ts（框架无关，本项目唯一的宿主就是 Vite），
  * 本文件只负责挑选宿主环境下的数据文件候选路径：
  *   - dev：页面读的是 public/data.json
  *   - preview：页面读的是构建产物 outDir/data.json；它不存在时退回 public/data.json

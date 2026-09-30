@@ -431,12 +431,11 @@ npm run data:validate   # 校验结果
 - 完全离线重建：`npm run data:refresh -- --offline`（用仓库里的 `scripts/.turnover_cache.json` 与 `.series_cache.json`）。
 - 数据是**增量**的：每天跑一次通常只抓 1 天，2–4 秒。跑完页面 ≤30 秒自动加载新数据（`/api/data-version` 轮询比对 mtime/size）。
 
-> 仓库唯一的 CI 是 `.github/workflows/desktop-mac.yml`（macOS dmg 桌面版打包）。
-> **触发条件是 push 到 main 且改动涉及 `market-dashboard/**`** —— 所以「更新完数据就 push」会连带
-> 重打一次 dmg，并**覆盖更新**对外的滚动预发布 `desktop-latest`（用户从那下载，免登录）。
-> CI 不跑数据管线：`data.json` 直接打进包当基线，App 启动后再自己拉最新数据。
-> 除这个 workflow 外没有别的 CI / 部署配置（也没有 Pages 设置），跑看板只需要本地 `npm start`。
+> 仓库**没有任何 CI / 部署配置**（没有 Actions、没有 Pages 设置），看板只在本地 `npm start` 跑。
 > 不要凭空新增 CI、Actions 或部署流水线——用户没要求就不加。
+> 同理也不要新增桌面版 / Electron / 打包相关的东西：曾有过 `electron/` + `electron-builder.yml`
+> + `desktop:pack`（macOS dmg），已整体删除（依赖树里也清掉了 electron 与 esbuild），
+> 现在**纯 Web 项目**。
 
 ---
 
