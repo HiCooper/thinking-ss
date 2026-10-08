@@ -246,7 +246,11 @@ def main() -> None:
     # 已实现盈亏计入当日盈亏。适用范围：卖出日 == 快照日，或卖出日落在
     # 「最后已记录日 ~ 快照日」的断档区间（补记时也要算进去）。
     # 更早的卖出视为已结算进历史记录，不再重复计入。
-    last_rec = history["days"][-1]["date"] if history["days"] else None
+    last_rec = next(
+        (d["date"] for d in reversed(history["days"]) if d.get("date") != trade_date),
+        None,
+    )  # 排除快照日当天：当天这条可能是几分钟前刚写的（尚未含断档卖出），
+    # 若把它当作断档下界，更早的卖出会被误判为「已结算」而漏记
     applied = 0
     for t in load_trades():
         tdate = str(t["date"])
