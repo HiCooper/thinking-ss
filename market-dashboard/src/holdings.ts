@@ -299,6 +299,14 @@ export interface HoldingCell extends HoldingRow {
    * 只看剩余份额会让减仓当天凭空少一半，与券商对不上。
    */
   todayPnl: number | null
+  /**
+   * **累计**已实现盈亏（相对成本，含费；0 = 该只从未卖出过）。
+   *
+   * 与 `pnl`（浮动）相加 = 券商 App 的「持仓盈亏」——券商把已实现摊进了剩余持仓成本价，
+   * 我们这边成本价不动、已实现单列，两边差的正是这一块。所以这一列是逐行对账的桥。
+   * 注意与 `soldPnlByCode` 区分：那个是「当日·相对昨收」，这个是「累计·相对成本」。
+   */
+  realizedCumulative: number
   /** 回本所需涨幅（0.2 = 还需涨 20%） */
   breakevenPct: number
 }
@@ -308,6 +316,8 @@ export function buildCells(
   quotes: HoldingQuotesFile | null,
   /** 当日卖出已实现，按 code 汇总（realizedToday() 产出的 soldByCode）。没有就传 null */
   soldToday: Map<string, { pnl: number; shares: number }> | null = null,
+  /** 累计已实现，按 code 汇总（realizedCumulativeByCode()）。没有就传 null */
+  realizedByCode: Map<string, number> | null = null,
 ): HoldingCell[] {
   const groupNames = new Map(file.groups.map((g) => [g.id, g.name]))
   const byCode = new Map<string, HoldingQuote>()
@@ -354,6 +364,7 @@ export function buildCells(
       todayPnl,
       soldPnlByCode,
       soldSharesToday: sold?.shares ?? 0,
+      realizedCumulative: realizedByCode?.get(row.code) ?? 0,
       breakevenPct: marketValue > 0 ? (costValue - marketValue) / marketValue : 0,
     }
   })
@@ -456,16 +467,37 @@ export async function fetchCash(signal?: AbortSignal): Promise<CashFile | null> 
   }
 }
 
-/** 北京时间的「今天」（YYYY-MM-DD）。卖出记录的 date 是交易日，与它比对。 */
+/** 北京时间的「今天」（YYYY-MM-DD）。仅作报价日期缺失时的兜底。 */
 function beijingToday(): string {
   return new Date(Date.now() + 8 * 3_600_000).toISOString().slice(0, 10)
 }
 
 /**
- * 挑出「date == 今天」的卖出并折算成今日盈亏增量。
+ * 报价所属的**交易日**（YYYY-MM-DD）——取所有报价里最新的 `quote_date`。
  *
- * 只认**今天**的记录：更早的卖出已经结算进每日收益记录（holdings-history.json），
- * 在这里重复计入会让周六打开页面时凭空多出一笔周五的已实现盈亏。
+ * 为什么不用挂钟的「今天」：周末/节假日打开页面时，报价仍是上一交易日的收盘价、
+ * `prev_close` 也是上一交易日的前收，整张表算的都是那一天的盈亏。此时若按挂钟筛卖出记录，
+ * 那天的已实现会被整批丢掉——实测 2026-10-24（周六）看板「今日盈亏」6,951.25，
+ * 券商「昨日盈亏」7,143.18，差额恰好是 10-23 的已实现 191.93。
+ * 用报价日期筛选，两边就能对上。
+ *
+ * 拿不到 quote_date（如整体降级到快照价）时才退回北京时间今天。
+ */
+function quoteTradeDate(quotes: HoldingQuotesFile | null): string {
+  let max: string | null = null
+  for (const q of quotes?.quotes ?? []) {
+    const d = q.quote_date
+    if (typeof d === 'string' && d.length >= 10 && (max === null || d > max)) max = d
+  }
+  return max ?? beijingToday()
+}
+
+/**
+ * 挑出「date == 报价所属交易日」的卖出并折算成当日盈亏增量。
+ *
+ * 必须与报价同一天：整张表按那一天的收盘价算，卖出记录也得一起算进来，
+ * 否则减仓那天的已实现会凭空消失，与券商 App 的「当日盈亏」对不上。
+ * **更早**的卖出已结算进每日收益记录（holdings-history.json），不在这里重复计入。
  *
  * 单条折算优先级：`day_realized`（券商口径，含费）→ 实时报价现算
  * `份额 ×（现价 − 昨收）− fee`。连实时报价都拿不到时跳过该条（不猜数）。
@@ -476,7 +508,7 @@ export function realizedToday(
 ): RealizedToday | null {
   const trades = file?.trades ?? []
   if (trades.length === 0) return null
-  const today = beijingToday()
+  const tradeDate = quoteTradeDate(quotes)
   const byCode = new Map((quotes?.quotes ?? []).map((q) => [q.code, q]))
 
   let pnl = 0
@@ -484,7 +516,7 @@ export function realizedToday(
   let hit = false
   const soldByCode = new Map<string, { pnl: number; shares: number }>()
   for (const t of trades) {
-    if (t.date !== today) continue
+    if (t.date !== tradeDate) continue
     const shares = toNum(t.shares) ?? 0
     const price = toNum(t.price) ?? 0
     const fee = toNum(t.fee) ?? 0
@@ -534,16 +566,50 @@ export function realizedCumulative(file: RealizedTradesFile | null): number | nu
   let sum = 0
   let hit = false
   for (const t of trades) {
-    const shares = toNum(t.shares) ?? 0
-    const price = toNum(t.price) ?? 0
-    const cost = toNum(t.cost) ?? 0
-    if (shares <= 0 || price <= 0 || cost <= 0) continue
-    const vc = toNum(t.pnl_vs_cost)
-    // pnl_vs_cost 已含费；没填就现算（fee 默认 0）
-    sum += vc !== null ? vc : shares * (price - cost) - (toNum(t.fee) ?? 0)
+    const v = tradeRealized(t)
+    if (v === null) continue
+    sum += v
     hit = true
   }
   return hit ? sum : null
+}
+
+/**
+ * 单笔卖出相对**成本**的已实现盈亏（含费）。
+ * `pnl_vs_cost` 优先（已含费）；没填就现算 `份额×(卖价−成本)−fee`。
+ * 份额/价格/成本任一非正 → 视为脏数据返回 null（不计入合计）。
+ */
+function tradeRealized(t: RealizedTrade): number | null {
+  const shares = toNum(t.shares) ?? 0
+  const price = toNum(t.price) ?? 0
+  const cost = toNum(t.cost) ?? 0
+  if (shares <= 0 || price <= 0 || cost <= 0) return null
+  const vc = toNum(t.pnl_vs_cost)
+  return vc !== null ? vc : shares * (price - cost) - (toNum(t.fee) ?? 0)
+}
+
+/**
+ * 按代码汇总的**累计**已实现盈亏（相对成本，含费）。
+ *
+ * 用途：明细表每行的「已实现」列。与「浮动盈亏」相加，恰好等于券商 App 的
+ * 「持仓盈亏」（券商把已实现摊进剩余持仓的成本价），所以拿它逐行对账能一眼合上。
+ *
+ * 只收有卖出记录的代码；没卖过的标的不出现在 Map 里（调用方按 0 处理）。
+ * null = 整份流水为空（正常状态）。
+ */
+export function realizedCumulativeByCode(
+  file: RealizedTradesFile | null,
+): Map<string, number> | null {
+  const trades = file?.trades ?? []
+  if (trades.length === 0) return null
+  const out = new Map<string, number>()
+  for (const t of trades) {
+    const v = tradeRealized(t)
+    if (v === null) continue
+    const code = String(t.code)
+    out.set(code, (out.get(code) ?? 0) + v)
+  }
+  return out.size > 0 ? out : null
 }
 
 /* ------------------------------ 组合与分组汇总 ------------------------------ */

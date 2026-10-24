@@ -18,6 +18,7 @@ import {
   portfolioTotals,
   realizedToday,
   realizedCumulative,
+  realizedCumulativeByCode,
 } from '../holdings'
 import type {
   CashFile,
@@ -243,9 +244,11 @@ export default function HoldingsBoard() {
    * 与上面的 realized（当日、相对昨收）是两个口径，别混。
    */
   const realizedTotal = useMemo(() => realizedCumulative(tradesFile), [tradesFile])
+  /** 按代码的累计已实现——明细表「已实现」列用；与 realizedTotal 同口径、只是粒度更细 */
+  const realizedByCode = useMemo(() => realizedCumulativeByCode(tradesFile), [tradesFile])
   const cells = useMemo(
-    () => (file ? buildCells(file, quotes, realized?.soldByCode ?? null) : []),
-    [file, quotes, realized],
+    () => (file ? buildCells(file, quotes, realized?.soldByCode ?? null, realizedByCode) : []),
+    [file, quotes, realized, realizedByCode],
   )
   /** 可用现金；只进今日盈亏率的分母与现金卡展示，不改市值/盈亏口径 */
   const cashBalance = cashFile && Number.isFinite(cashFile.balance) ? cashFile.balance : null
