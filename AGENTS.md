@@ -407,11 +407,11 @@ python3 scripts/reconcile_broker.py --market-value 123456.78 --cash 12345.67 \
 | `src/stats.ts` | 历史分位（百分位排名 + P20/P50/P80）。窗口取尾部 250 个**非 null** 值，样本 < 20 返回 `null`（小样本分位数是噪音）。分位带走 `chartTheme.percentileBand()`，用 `markArea`/`markLine` 而不是加数据线 |
 | `src/components/SummaryCards.tsx` | 四张卡，**顺序固定：成交额 → 杠杆率 → 两融 → 10Y 美债**。① 「最新交易日」已删（与小字说明重复）——不要把只有日期的卡加回来；② 科创50 也已删（底部常驻指数条里已有实时的）——**加任何卡前先确认底部条 / 实时面板 / 图里没有同一个读数**。杠杆率与两融**必须相邻**：同一分子的绝对规模 vs 相对拥挤度，实测分位相反（44% vs 73%），拆开就看不出对照。杠杆率的分子分母必须取**同一行**（跨日取会算出一个不存在的比率） |
 | `scripts/export_data.py` | **日K来源的列（`kospi` / `star50`）必须过 `kline_ok()`**：盘中刷新会拿到没走完的当日 K 线（实测 09:32 把 1623.06 写成当日值，真实收盘 1606.29）。当日不到 `KLINE_FINAL_MINUTES`（15:05）就置 `null`，与两融同一约定。新增日K来源的列时**照做**。**指数序列还必须过 `clean_index()`**：上游会把最新一根的收盘写成 `0`（实测 2026-09-23 KOSPI，OHLC 与成交量都正常、只有 `c="0"`），而 `merge_series` 只跳过 `None`，`0` 会进缓存并盖掉已经修好的值 —— 入缓存前必须剔除 `≤0` 与 `NaN`。上游已修好、代码里仍暂留的逐日修正见 `KOSPI_REPAIR` |
-| `src/holdings.ts` | `GroupStat.pnlContribution` 是**有符号**的；新增派生指标时保持对正负都成立 |
+| `src/holdings.ts` | `GroupStat.pnlContribution` 是**有符号**的；新增派生指标时保持对正负都成立。**`realizedToday()` 按「报价所属交易日」筛选，不是挂钟的今天**（`quoteTradeDate()` 取所有报价里最新的 `quote_date`，取不到才退回北京时间今天）：周末/节假日打开时报价仍是上一交易日的收盘价与昨收，若按挂钟筛，那天的已实现会被整批丢掉——实测 2026-10-24（周六）「今日盈亏」6,951.25 vs 券商「昨日盈亏」7,143.18，差额恰为 10-23 的已实现 191.93。改这里前先想清楚「表格算的是哪一天」 |
 | `src/components/HoldingsStructureChart.tsx` | 发散条形图：`yAxis.axisLine.onZero = false` 让类目名贴左（否则压在负向条上），0 处靠 `markLine` 标出 |
 | `src/components/HoldingsPnlChart.tsx` | `xAxis` 的 `min/max` 必须同时覆盖正负；配色用 `chartTheme.pnlColor()` |
 | `src/components/HoldingsPnlTrendChart.tsx` | 持仓图 1，**当日**口径双轴：左轴 `day_pnl`（刻度**直接用「元」**、千分位整数 + `元` 后缀，**不要再折成「万」**——日盈亏量级就在千元上下，「0.62万」既多一次心算又和 tooltip 的「+6,210.29 元」对不上）、右轴 `day_pnl_pct`（分母是昨收市值，**不要**换成累计 `pnl`/`pnl_pct`）。两者都可为 `null`（首日无前收）——`connectNulls: false` 断线、量程计算要先滤 null、全 null 时用 `graphicNotice` 在图内提示 |
-| `src/components/HoldingsTable.tsx` | 「距成本」的文案与颜色、发散微条方向（`.holdings-pnlbar__fill.is-loss/.is-gain`） |
+| `src/components/HoldingsTable.tsx` | 「距成本」的文案与颜色、发散微条方向（`.holdings-pnlbar__fill.is-loss/.is-gain`）。**「已实现」列**（2026-10-24 加）＝累计卖出相对成本的已实现盈亏（含费），由 `realizedCumulativeByCode()` 按 code 从 `realized-trades.json` 实时汇总；**与左侧「浮动盈亏」相加 = 券商 App 的「持仓盈亏」**（券商把已实现摊进了剩余持仓成本价）。⚠️ **不要**在 `holdings.md` 的明细表里加第 8 列：那一列是静态副本必然漂移，且 `export_holdings.py` 只取 `cells[:7]`、完全不读流水，写错**不会报错** |
 
 ---
 

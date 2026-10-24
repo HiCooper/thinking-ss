@@ -19,6 +19,7 @@ type SortKey =
   | 'todayPnl'
   | 'marketValue'
   | 'pnl'
+  | 'realizedCumulative'
   | 'pnlPct'
   | 'breakevenPct'
 
@@ -107,6 +108,22 @@ const COLUMNS: Column[] = [
     render: (c) => <span className={trendClass(c.pnl)}>{fmtSignedYuan(c.pnl)}</span>,
   },
   {
+    key: 'realizedCumulative',
+    label: '已实现',
+    numeric: true,
+    title:
+      '累计卖出相对成本的已实现盈亏（含费）；没卖过为「—」。' +
+      '与左侧「浮动盈亏」相加 = 券商 App 的「持仓盈亏」（券商把已实现摊进了剩余持仓成本价）',
+    render: (c) =>
+      c.realizedCumulative === 0 ? (
+        <span className="muted">—</span>
+      ) : (
+        <span className={trendClass(c.realizedCumulative)}>
+          {fmtSignedYuan(c.realizedCumulative)}
+        </span>
+      ),
+  },
+  {
     key: 'pnlPct',
     label: '盈亏率',
     numeric: true,
@@ -184,7 +201,8 @@ export default function HoldingsTable({ cells, groups }: HoldingsTableProps) {
     setSortKey(key)
     // 金额/份额类列默认从大到小；盈亏类默认从小到大（最惨在前）
     setSortDir(
-      key === 'pnl' || key === 'pnlPct' || key === 'breakevenPct' || key === 'todayPnl'
+      key === 'pnl' || key === 'pnlPct' || key === 'breakevenPct' || key === 'todayPnl' ||
+        key === 'realizedCumulative'
         ? 'asc'
         : 'desc',
     )
