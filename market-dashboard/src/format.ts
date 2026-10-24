@@ -50,6 +50,12 @@ export function fmtPct(v: number | null | undefined, digits = 2): string {
   return `${fmtSigned(v, digits)}%`
 }
 
+/** 无符号百分比（93.48%）：占比类指标（总仓位、占总资产…）用，+/− 号没有意义。 */
+export function fmtPctUnsigned(v: number | null | undefined, digits = 2): string {
+  if (!isNum(v)) return EMPTY
+  return `${fmtNum(v, digits)}%`
+}
+
 /** 收益率变动用 bp 表示：1 个百分点 = 100bp。 */
 export function fmtBp(v: number | null | undefined, digits = 1): string {
   if (!isNum(v)) return EMPTY

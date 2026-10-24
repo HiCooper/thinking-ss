@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { fmtNum, fmtPct, fmtSignedYuan, fmtYuan, trendClass } from '../format'
+import { fmtNum, fmtPct, fmtPctUnsigned, fmtSignedYuan, fmtYuan, trendClass } from '../format'
 import { breakevenOf, dilutedView } from '../holdings'
 import type { CashFile, HoldingCell, HoldingQuotesFile, PortfolioTotals } from '../holdings'
 
@@ -111,7 +111,7 @@ export default function HoldingsSummary({
                 },
                 {
                   label: '占总资产',
-                  text: fmtPct(
+                  text: fmtPctUnsigned(
                     accountValue && accountValue > 0 ? (cash.balance / accountValue) * 100 : 0,
                   ),
                   title:
@@ -156,7 +156,7 @@ export default function HoldingsSummary({
             ? [
                 {
                   label: '总仓位',
-                  text: fmtPct((totals.marketValue / accountValue) * 100),
+                  text: fmtPctUnsigned((totals.marketValue / accountValue) * 100),
                   title:
                     `持仓市值 / 账户总值（持仓市值 + 可用现金 ${fmtYuan(cash?.balance ?? 0)}）。` +
                     '与现金卡的「占总资产」互补，两者相加为 100%',
