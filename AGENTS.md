@@ -72,7 +72,7 @@ market-dashboard/public/holdings-history.json ← 账户每日收益记录。**�
 | `plugin/localApi.ts` | 本地接口插件：`/api/spot`、`/api/holdings`、`/api/data-version` |
 | `scripts/export_data.py` | 大盘日频数据导出（含逐日缓存） |
 | `scripts/export_holdings.py` | `holdings.md` → `public/holdings.json`（两者都不入库） |
-| `scripts/record_holdings_snapshot.py` | 收盘后追加一笔**账户级**收益记录 → `public/holdings-history.json`（不入库）。清仓/减仓时读 `public/realized-trades.json` 把卖出净额计入市值、已实现盈亏计入当日盈亏（否则清仓当天市值凭空缩水） |
+| `scripts/record_holdings_snapshot.py` | 收盘后追加一笔**账户级**收益记录 → `public/holdings-history.json`（不入库）。`realized-trades.json` **只影响「当日盈亏」**：把当天卖出部分相对昨收的已实现并进 `day_pnl`（与券商「当日盈亏」对齐）。**`market_value`/`cost` 只算当前持仓**，`pnl = 市值 − 成本` = 剩余持仓的浮动盈亏（与图 1 tooltip 的「累计浮动盈亏」一致）。⚠️ **不要**再把卖出净额加回市值、卖出成本加回成本——旧口径只在「断档区间」临时加回、结算后又撤掉，会制造台阶（实测 2026-10-21 多算 8,315.58、10-23 多算 59,411.03），且与 label 不符。卖出所得现金由 `cash.json` 单独体现 |
 | ↑ 的自动检查 | `npm start` 会调 `--if-due`：仅在「已收盘且今天没记录」时补记，盘中/非交易日跳过 |
 | `public/data.json` | 大盘日频数据（随仓库提交） |
 | `public/holdings.json` | 持仓快照（由脚本生成，**别手改**；**本地文件，不入库**） |

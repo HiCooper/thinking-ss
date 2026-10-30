@@ -242,51 +242,51 @@ def main() -> None:
     prev_date = sorted(prev_dates)[-1] if prev_dates else None
 
     # ── 已实现卖出（realized-trades.json）────────────────────────────────
-    # 口径：卖出净额转为现金留在账户 → 计入市值；卖出成本计回总投入（钱没取出）；
-    # 已实现盈亏计入当日盈亏。适用范围：卖出日 == 快照日，或卖出日落在
-    # 「最后已记录日 ~ 快照日」的断档区间（补记时也要算进去）。
-    # 更早的卖出视为已结算进历史记录，不再重复计入。
-    last_rec = next(
-        (d["date"] for d in reversed(history["days"]) if d.get("date") != trade_date),
-        None,
-    )  # 排除快照日当天：当天这条可能是几分钟前刚写的（尚未含断档卖出），
-    # 若把它当作断档下界，更早的卖出会被误判为「已结算」而漏记
-    applied = 0
+    # 口径（2026-10-26 起，与图 1 tooltip 的「累计浮动盈亏」对齐）：
+    #   market_value / cost **只算当前还持有的份额**，卖出净额不进市值、卖出成本不回加；
+    #   pnl = 市值 − 成本 = 剩余持仓的浮动盈亏。
+    #   day_pnl 额外并入「**当天**卖出部分相对昨收的已实现」，与券商「当日盈亏」对齐。
+    #
+    # 为什么不再把卖出净额加回市值：旧口径只在「断档区间」临时加回、等它结算后又撤掉，
+    # 于是 pnl 会凭空跳一下，且 market_value 与 label 不符
+    # （实测 10-21 多算 8,315.58、10-23 多算 59,411.03）。卖出所得现金由 cash.json
+    # 单独体现，不需要挤进持仓市值。
     for t in load_trades():
         tdate = str(t["date"])
-        if not (tdate == trade_date or (last_rec or "") < tdate < trade_date):
-            if tdate > trade_date:
-                print(f"⚠️ 卖出记录 {t.get('name')}（{tdate}）晚于快照日 {trade_date}，本次未计入", file=sys.stderr)
+        if tdate > trade_date:
+            print(f"⚠️ 卖出记录 {t.get('name')}（{tdate}）晚于快照日 {trade_date}，本次未计入", file=sys.stderr)
             continue
+        if tdate != trade_date:
+            continue          # 更早日期的已实现属于那一天，不重复计入
         shares = float(t["shares"])
         price = float(t["price"])
         fee = float(t.get("fee") or 0.0)
-        total_mv += shares * price - fee          # 卖出净额 = 现金，计入账户市值
-        total_cost += shares * float(t["cost"])   # 总投入不变（资金留在账户内）
         if "day_realized" in t:
             day_pnl += float(t["day_realized"])   # 券商口径的当日已实现，优先采用
         else:
             try:
                 bars = fetch_closes(tencent_symbol(str(t["code"])))
-                closes = dict(bars)
-                if tdate != trade_date and last_rec and last_rec in closes:
-                    ref = last_rec                # 断档补记：与最后已记录日比，避免跨天重复
-                else:
-                    earlier = [d for d, _ in bars if d < tdate]
-                    ref = earlier[-1] if earlier else None
+                earlier = [d for d, _ in bars if d < tdate]
+                ref = earlier[-1] if earlier else None
                 if ref is None:
                     raise ValueError("取不到参考日收盘价")
-                day_pnl += shares * (price - closes[ref]) - fee
+                day_pnl += shares * (price - dict(bars)[ref]) - fee
             except Exception as e:
                 print(
                     f"⚠️ 卖出记录 {t.get('name')}：当日已实现盈亏算不出（{e}），当日盈亏暂不含它",
                     file=sys.stderr,
                 )
-        applied += 1
-        print(f"  ＋已实现卖出 {t.get('name')}（{tdate}）：{shares:,.0f} 股 @ {price}，净额 {shares*price-fee:+,.2f} 计入市值")
+        print(f"  ＋当日已实现卖出 {t.get('name')}（{tdate}）：{shares:,.0f} 股 @ {price}，计入当日盈亏")
 
     pnl = total_mv - total_cost
-    prior_value = total_mv - day_pnl           # 昨收市值
+    # 当日盈亏率的分母：完整账户值 = 纯持仓市值 + 截至当日的累计卖出净额（现金）
+    # 再用「今日盈亏」倒推昨收账户值，避免减仓当天分母凭空缩一截。
+    proceeds_cum = sum(
+        float(x["shares"]) * float(x["price"]) - float(x.get("fee") or 0.0)
+        for x in load_trades()
+        if str(x["date"]) <= trade_date
+    )
+    prior_value = total_mv + proceeds_cum - day_pnl
     record = {
         "date": trade_date,
         "market_value": round(total_mv, 2),
