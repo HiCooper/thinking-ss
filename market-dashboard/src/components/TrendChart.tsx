@@ -74,6 +74,13 @@ function buildAreas(
   return { above, below }
 }
 
+/**
+ * 图高 560：可画区 = 560 − 52（顶）− 74（底部滑条）= 434px。配 100 点的左轴刻度后
+ * 每像素约 2.8 点，日线单日中位变动约 12px（340 高时只有 6px）——高度是唯一能把
+ * 「波动」直接放大成像素的量。
+ */
+const CHART_HEIGHT = 560
+
 export default function TrendChart({ rows }: { rows: MarketRow[] }) {
   const read = useMemo(() => trendStateOf(rows), [rows])
 
@@ -87,6 +94,20 @@ export default function TrendChart({ rows }: { rows: MarketRow[] }) {
     // 价格还在 MA20 上方但创新高的家数在萎缩，是趋势衰减的第一信号。
     const breadthHigh = column(rows, 'breadth_high20')
     const breadthLow = column(rows, 'breadth_low20')
+
+    /**
+     * 左轴刻度密度：每 100 点一格，并把上下界收到 100 的整倍数。
+     * auto 刻度在这个量程（约 1,070 点）给的是 200 一格，网格线太稀，
+     * 眼睛没法拿它当参照量出「这一段跌了 400 点」。
+     */
+    const AXIS_STEP = 100
+    const priceValues = closes.filter((v): v is number => v !== null && Number.isFinite(v))
+    const yMin = priceValues.length
+      ? Math.floor(Math.min(...priceValues) / AXIS_STEP) * AXIS_STEP
+      : undefined
+    const yMax = priceValues.length
+      ? Math.ceil(Math.max(...priceValues) / AXIS_STEP) * AXIS_STEP
+      : undefined
 
     const tooltipFormatter = (params: unknown): string => {
       const items = asItems(params)
@@ -134,6 +155,9 @@ export default function TrendChart({ rows }: { rows: MarketRow[] }) {
           name: '点',
           nameTextStyle: { color: C.axisLabel, fontSize: 11 },
           scale: true,
+          interval: AXIS_STEP,
+          min: yMin,
+          max: yMax,
         }),
         {
           // 副轴：家数。不画网格线，避免与主轴网格打架（与图 4 双轴同一惯例）
@@ -242,7 +266,7 @@ export default function TrendChart({ rows }: { rows: MarketRow[] }) {
         ) : null}
         <span className="muted">底色：站上 MA20 浅红 / 跌破浅绿（近一年窗口内）</span>
       </div>
-      <EChart option={option} height={340} ariaLabel="沪深300 收盘价与 20/60 日均线走势图（副轴为创20日新高/新低家数）" />
+      <EChart option={option} height={CHART_HEIGHT} ariaLabel="沪深300 收盘价与 20/60 日均线走势图（副轴为创20日新高/新低家数）" />
     </>
   )
 }
