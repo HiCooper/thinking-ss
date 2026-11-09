@@ -37,5 +37,14 @@ market-dashboard/public/holdings-history.json
 market-dashboard/public/realized-trades.json
 market-dashboard/public/cash.json
 
+# 分析用的临时图表：本地归档在 img/，不入库
+/img/hs300-eps-growth.png
+/img/hs300-eps-overlay.png
+/img/hs300-profit-growth-real.png
+/img/margin-cycles-2015-2021-2026.png
+
+# 临时截图 / 脚本（自查用，不入库）
+/tmp/
+
 # WorkBuddy agent 的本地工作数据（项目记忆 / 会话日志），只属于这台机器
 /.workbuddy/

@@ -170,3 +170,38 @@ export interface SpotData {
   errors: string[]
 }
 
+/** 分时点：`HH:MM` + 价格；最后一点是当前未走完的分钟。 */
+export interface IntradayPoint {
+  t: string
+  v: number
+  /** 当日累计成交额（元）；上游缺这一列时为 null */
+  amt: number | null
+}
+
+/** 上一交易日的累计成交额点（元），用于「今日 vs 上日同时刻」的同比副图。 */
+export interface IntradayAmtPoint {
+  t: string
+  v: number
+}
+
+/** 单个指数的当日分时。 */
+export interface IntradaySeries {
+  code: string
+  name: string
+  /** 昨收：坐标轴对称与涨跌幅的基准 */
+  prev_close: number | null
+  points: IntradayPoint[]
+  /** 上一交易日（完整交易日）的分钟累计成交额 */
+  prev_amt: IntradayAmtPoint[]
+  /** `prev_amt` 所属交易日，`YYYY-MM-DD`；取不到时为 null */
+  prev_amt_date: string | null
+}
+
+/** GET /api/intraday 的返回结构（沪深300 / 科创50，5s 轮询）。 */
+export interface IntradayData {
+  ts: string
+  session: SpotSession
+  indices: IntradaySeries[]
+  errors: string[]
+}
+

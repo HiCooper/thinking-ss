@@ -531,6 +531,77 @@
   white-space: nowrap;
 }
 
+/* ============================ 盘中分时（沪深300 / 科创50） ============================ */
+.intraday-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.intraday-tile {
+  min-width: 0;
+  padding: 8px 10px 2px;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.intraday-tile__head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.intraday-tile__name {
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.intraday-tile__price {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+  white-space: nowrap;
+}
+
+.intraday-tile__chg {
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.intraday-tile__time {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+/* 成交额读数：与价格读数同属这张卡片，图里两栏共用一条时间轴，所以不再单独成块 */
+.intraday-tile__amt {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  padding: 2px 2px 0;
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.intraday-tile__amt-now {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.intraday-tile__amt-yoy {
+  margin-left: auto;
+  font-weight: 600;
+}
+
 /* ================= 指数信息条（固定在屏幕底部 / 铺满 100% 宽） ================= */
 /* 由 LiveStrip 用 portal 渲染进 index.html 的 #ticker-root。
    这里用 position:fixed 而不是 sticky —— 元素在 body 里位于 #root **之前**，
@@ -876,6 +947,10 @@ code {
 
   .live-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .intraday-grid {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .live-indices {

@@ -8,6 +8,7 @@ import MarginChart from './MarginChart'
 import LeverageTurnoverChart from './LeverageTurnoverChart'
 import CrossMarketChart from './CrossMarketChart'
 import LiveStrip from './LiveStrip'
+import IntradayStrip from './IntradayStrip'
 import type { MarketData } from '../types'
 
 export default function Dashboard({ data }: { data: MarketData }) {
@@ -39,6 +40,9 @@ export default function Dashboard({ data }: { data: MarketData }) {
   return (
     <>
       <LiveStrip />
+
+      {/* 盘中分时：沪深300 / 科创50 两张走势图（5s 轮询，独立于上方 30s 的面板） */}
+      <IntradayStrip />
 
       {/* 历史数据板块标题：与「实时行情」表头同款语言，但圆点用静态灰以区分「非实时」 */}
       <section className="section-head">

@@ -1,4 +1,8 @@
 import type {
+  IntradayAmtPoint,
+  IntradayData,
+  IntradayPoint,
+  IntradaySeries,
   MarketData,
   MarketRow,
   NumericKey,
@@ -264,33 +268,93 @@ function normalizeSpot(raw: unknown): SpotData {
   }
 }
 
+/** 请求一个本地实时接口并解析 JSON；失败统一抛 SpotUnavailableError。 */
+async function fetchLocalJson(path: string, signal?: AbortSignal): Promise<unknown> {
+  let res: Response
+  try {
+    res = await fetch(path, { signal, cache: 'no-store' })
+  } catch (err) {
+    if (err instanceof DOMException && err.name === 'AbortError') throw err
+    throw new SpotUnavailableError(`无法连接 ${path}（网络错误）`)
+  }
+
+  if (res.status === 404) {
+    throw new SpotUnavailableError(`${path} 不存在（HTTP 404）`)
+  }
+  if (!res.ok) {
+    throw new SpotUnavailableError(`${path} 返回 HTTP ${res.status} ${res.statusText}`)
+  }
+
+  try {
+    return await res.json()
+  } catch {
+    throw new SpotUnavailableError(`${path} 返回的不是合法 JSON`)
+  }
+}
+
 /**
  * 读取本地实时接口 `/api/spot`（由 Vite 插件在 dev / preview 服务端代理新浪行情）。
  * 静态部署下该路径不存在（404）→ 抛 SpotUnavailableError，由 LiveStrip 做优雅降级。
  */
 export async function fetchSpot(signal?: AbortSignal): Promise<SpotData> {
-  let res: Response
-  try {
-    res = await fetch('/api/spot', { signal, cache: 'no-store' })
-  } catch (err) {
-    if (err instanceof DOMException && err.name === 'AbortError') throw err
-    throw new SpotUnavailableError('无法连接 /api/spot（网络错误）')
+  return normalizeSpot(await fetchLocalJson('/api/spot', signal))
+}
+
+function normalizeIntradaySeries(raw: unknown): IntradaySeries | null {
+  const o = objOf(raw)
+  if (!o) return null
+  const code = strOf(o, 'code')
+  const name = strOf(o, 'name')
+  if (!code || !name) return null
+
+  const list = Array.isArray(o.points) ? o.points : []
+  const points: IntradayPoint[] = []
+  for (const item of list) {
+    const p = objOf(item)
+    if (!p) continue
+    const t = strOf(p, 't')
+    const v = toNum(p.v)
+    if (t && v !== null) points.push({ t, v, amt: toNum(p.amt) })
   }
 
-  if (res.status === 404) {
-    throw new SpotUnavailableError('/api/spot 不存在（HTTP 404）')
-  }
-  if (!res.ok) {
-    throw new SpotUnavailableError(`/api/spot 返回 HTTP ${res.status} ${res.statusText}`)
+  const prevList = Array.isArray(o.prev_amt) ? o.prev_amt : []
+  const prevAmt: IntradayAmtPoint[] = []
+  for (const item of prevList) {
+    const p = objOf(item)
+    if (!p) continue
+    const t = strOf(p, 't')
+    const v = toNum(p.v)
+    if (t && v !== null) prevAmt.push({ t, v })
   }
 
-  let raw: unknown
-  try {
-    raw = await res.json()
-  } catch {
-    throw new SpotUnavailableError('/api/spot 返回的不是合法 JSON')
+  return {
+    code,
+    name,
+    prev_close: toNum(o.prev_close),
+    points,
+    prev_amt: prevAmt,
+    prev_amt_date: strOf(o, 'prev_amt_date'),
   }
-  return normalizeSpot(raw)
+}
+
+/** 把盘中分时收敛成契约形状；单个序列缺 code/name 就丢弃，不影响另一张图。 */
+function normalizeIntraday(raw: unknown): IntradayData {
+  const o = objOf(raw) ?? {}
+  const list = Array.isArray(o.indices) ? o.indices : []
+  return {
+    ts: strOf(o, 'ts') ?? '—',
+    session: normalizedSession(o.session),
+    indices: list.map(normalizeIntradaySeries).filter((x): x is IntradaySeries => x !== null),
+    errors: Array.isArray(o.errors) ? o.errors.filter((e): e is string => typeof e === 'string') : [],
+  }
+}
+
+/**
+ * 读取盘中分时接口 `/api/intraday`（沪深300 / 科创50）。
+ * 腾讯分钟线的最后一点是当前分钟、随请求更新，所以 5s 轮询能看到最后一个点在动。
+ */
+export async function fetchIntraday(signal?: AbortSignal): Promise<IntradayData> {
+  return normalizeIntraday(await fetchLocalJson('/api/intraday', signal))
 }
 
 /* ------------------------------ /api/data-version（数据热更新） ------------------------------ */

@@ -90,6 +90,12 @@ const koreaMinUrl = (symbol: string) =>
  */
 const tencentMinUrl = (code: string) =>
   `https://web.ifzq.gtimg.cn/appstock/app/minute/query?code=${code}`
+/**
+ * 腾讯最近 5 个交易日的分钟线（含累计成交额）。`/minute/query` 只有当日，
+ * 拿不到「上日同时刻」的成交额，所以同比副图另走这条。
+ */
+const tencentDayUrl = (code: string) =>
+  `https://web.ifzq.gtimg.cn/appstock/app/day/query?code=${code}`
 
 /** 迷你图最多返回的点数：等距抽稀、保留首尾，降低传输与渲染开销。 */
 const SPARK_MAX_POINTS = 120
@@ -187,6 +193,41 @@ export interface SpotPayload {
    */
   qvix: SpotA50 | null
   spark: SpotSpark
+  errors: string[]
+}
+
+/** 分时点：北京时间 `HH:MM` + 价格（点）。最后一点是**未走完的当前分钟**，随轮询更新。 */
+export interface IntradayPoint {
+  t: string
+  v: number
+  /** 当日累计成交额（元）。上游缺这一列时为 null */
+  amt: number | null
+}
+
+/** 上一交易日的累计成交额点（元），用于「今日 vs 上日同时刻」的同比副图。 */
+export interface IntradayAmtPoint {
+  t: string
+  v: number
+}
+
+/** 单个指数的当日分时。 */
+export interface IntradaySeries {
+  code: string
+  name: string
+  /** 昨收：坐标轴对称与涨跌幅的基准 */
+  prev_close: number | null
+  points: IntradayPoint[]
+  /** 上一交易日（完整交易日）的分钟累计成交额 */
+  prev_amt: IntradayAmtPoint[]
+  /** `prev_amt` 所属交易日，`YYYY-MM-DD`；取不到时为 null */
+  prev_amt_date: string | null
+}
+
+/** `GET /api/intraday`：沪深300 / 科创50 的盘中分时（5s 轮询）。 */
+export interface IntradayPayload {
+  ts: string
+  session: SpotSession
+  indices: IntradaySeries[]
   errors: string[]
 }
 
@@ -485,10 +526,12 @@ async function fetchKoreaSpark(symbol: string, errors: string[]): Promise<SparkS
   return toSpark(pts, base)
 }
 
-/** 腾讯分时解析结果：点位 + 腾讯自带的昨收（`qt[code][4]`，仅作兜底）。 */
+/** 腾讯分时解析结果：点位 + 腾讯自带的昨收（`qt[code][4]`，仅作兜底）+ 数据所属交易日。 */
 interface MinPoints {
-  points: { t: string; v: number }[]
+  points: { t: string; v: number; amt: number | null }[]
   base: number | null
+  /** `YYYYMMDD`。周末 / 盘前打开时它仍是上一个交易日，**不能用挂钟日期代替** */
+  date: string | null
 }
 
 /* ------------------------------ QVIX（中国波指） ------------------------------ */
@@ -569,11 +612,94 @@ async function fetchQvix(errors: string[]): Promise<QvixResult> {
   }
 }
 
+type MinRow = { t: string; v: number; amt: number | null }
+
+/** 腾讯分钟行 `"HHMM 价 量 额"`：`[2]` 累计成交量（股）、`[3]` 累计成交额（元）。 */
+function parseTencentRows(rows: unknown[]): MinRow[] {
+  const points: MinRow[] = []
+  for (const row of rows) {
+    if (typeof row !== 'string') continue
+    const parts = row.trim().split(/\s+/)
+    const hhmm = parts[0] ?? ''
+    if (!/^\d{4}$/.test(hhmm)) continue
+    const v = toNum(parts[1])
+    if (v === null) continue
+    points.push({ t: `${hhmm.slice(0, 2)}:${hhmm.slice(2, 4)}`, v, amt: toNum(parts[3]) })
+  }
+  return points
+}
+
+/** `day/query` 里的单个交易日。 */
+interface DaySession {
+  /** `YYYYMMDD` */
+  date: string
+  points: MinRow[]
+}
+
+function parseDaySessions(json: unknown, code: string): DaySession[] {
+  const root = json as { data?: Record<string, unknown> } | null
+  const node = root?.data?.[code] as { data?: unknown } | undefined
+  const list = Array.isArray(node?.data) ? (node.data as unknown[]) : []
+
+  const out: DaySession[] = []
+  for (const item of list) {
+    if (!item || typeof item !== 'object') continue
+    const { date, data } = item as { date?: unknown; data?: unknown }
+    if (typeof date !== 'string' || !/^\d{8}$/.test(date)) continue
+    if (!Array.isArray(data)) continue
+    const points = parseTencentRows(data)
+    if (points.length > 0) out.push({ date, points })
+  }
+  // 上游按日期倒序返回；这里显式排序，避免依赖它的顺序
+  return out.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
+}
+
+/**
+ * `minute/query` 被挡（实测会返回 **HTTP 501 WAF 页**）时的兜底。
+ * `day/query` 里当日那根同样是逐分钟点、末点也是当前分钟，可以直接顶上。
+ * 昨收取「前一根交易日的收盘价」（那根 15:00 行情的价格），与 `qt[4]` 等价。
+ */
+async function fetchTencentDayPoints(
+  code: string,
+  label: string,
+  errors: string[],
+): Promise<MinPoints | null> {
+  let json: unknown
+  try {
+    const res = await fetch(tencentDayUrl(code), {
+      headers: SINA_HEADERS,
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+    })
+    if (!res.ok) {
+      errors.push(`${label} 日线兜底返回 HTTP ${res.status}`)
+      return null
+    }
+    json = await res.json()
+  } catch (err) {
+    errors.push(`${label} 日线兜底失败：${err instanceof Error ? err.message : String(err)}`)
+    return null
+  }
+
+  try {
+    const sessions = parseDaySessions(json, code)
+    const current = sessions[0]
+    if (!current) return null
+    const prevPoints = sessions[1]?.points ?? []
+    const prevLast = prevPoints.length > 0 ? prevPoints[prevPoints.length - 1] : null
+    return { points: current.points, base: prevLast?.v ?? null, date: current.date }
+  } catch (err) {
+    errors.push(`${label} 日线兜底解析失败：${err instanceof Error ? err.message : String(err)}`)
+    return null
+  }
+}
+
 /**
  * 腾讯分时解析。`data[code].data.data` 是 `"HHMM 价 量 额"` 字符串数组；
  * 昨收在 `data[code].qt[code][4]`（同一份响应里，不用另发一次请求）。
  *
  * 注意它返回的是**普通 JSON**（不是 JSONP），所以直接 `res.json()`。
+ * 主源不可用时静默换 `day/query` 兜底（数据等价），只有两个都失败才记错误 ——
+ * 否则一整天都挂着「抓取失败」，其实图是好的。
  */
 async function fetchTencentMinPoints(
   code: string,
@@ -587,38 +713,35 @@ async function fetchTencentMinPoints(
       signal: AbortSignal.timeout(TIMEOUT_MS),
     })
     if (!res.ok) {
-      errors.push(`${label} 分时返回 HTTP ${res.status}`)
-      return null
+      const cause = `${label} 分时返回 HTTP ${res.status}`
+      const fallback = await fetchTencentDayPoints(code, label, errors)
+      if (!fallback) errors.push(cause)
+      return fallback
     }
     json = await res.json()
   } catch (err) {
-    errors.push(`${label} 分时抓取失败：${err instanceof Error ? err.message : String(err)}`)
-    return null
+    const cause = `${label} 分时抓取失败：${err instanceof Error ? err.message : String(err)}`
+    const fallback = await fetchTencentDayPoints(code, label, errors)
+    if (!fallback) errors.push(cause)
+    return fallback
   }
 
   try {
     const root = json as { data?: Record<string, unknown> } | null
     const node = root?.data?.[code] as
-      | { data?: { data?: unknown }; qt?: Record<string, unknown> }
+      | { data?: { data?: unknown; date?: unknown }; qt?: Record<string, unknown> }
       | undefined
     const rows = Array.isArray(node?.data?.data) ? (node.data.data as unknown[]) : []
+    const rawDate = node?.data?.date
+    const date = typeof rawDate === 'string' && /^\d{8}$/.test(rawDate) ? rawDate : null
 
-    const points: { t: string; v: number }[] = []
-    for (const row of rows) {
-      if (typeof row !== 'string') continue
-      const parts = row.trim().split(/\s+/)
-      const hhmm = parts[0] ?? ''
-      if (!/^\d{4}$/.test(hhmm)) continue
-      const v = toNum(parts[1])
-      if (v === null) continue
-      points.push({ t: `${hhmm.slice(0, 2)}:${hhmm.slice(2, 4)}`, v })
-    }
+    const points = parseTencentRows(rows)
 
     // 昨收：qt[code] 的 [4]（与港股报价的 [3] 是同一个值，来源不同）
     const qt = node?.qt?.[code]
     const base = Array.isArray(qt) ? toNum(qt[4] as string | undefined) : null
 
-    return points.length > 0 ? { points, base } : null
+    return points.length > 0 ? { points, base, date } : null
   } catch (err) {
     errors.push(`${label} 分时解析失败：${err instanceof Error ? err.message : String(err)}`)
     return null
@@ -682,6 +805,137 @@ async function buildSpot(): Promise<SpotPayload> {
     },
     errors,
   }
+}
+
+/* ------------------------------ 盘中分时（沪深300 / 科创50） ------------------------------ */
+
+/**
+ * 两个指数的当日分时。腾讯的分钟线**最后一点就是当前分钟**，会随请求更新 ——
+ * 所以 5s 轮询不是「等下一根分钟 K」，而是同一条线上最后一个点在动。
+ */
+const INTRADAY_INDICES = [
+  { code: 'sh000300', name: '沪深300' },
+  { code: 'sh000688', name: '科创50' },
+] as const
+
+/** 缓存 4s：多标签页 / 重复点击时合并成一次上游请求，又不至于让 5s 轮询读旧值。 */
+const INTRADAY_CACHE_MS = 4_000
+let intradayCache: { at: number; payload: IntradayPayload } | null = null
+let intradayInFlight: Promise<IntradayPayload> | null = null
+
+/**
+ * 所给交易日的**前一个交易日**的分钟累计成交额。
+ *
+ * `day/query` 返回最近 5 个交易日；当天的数据是未走完的，不能当基准 —— 取它的前一根。
+ * 基准日由分时数据自带的日期决定（周末 / 盘前打开时那是上一个交易日，不是挂钟今天），
+ * 所以**不叫「昨日」**：周一的前一根是周五、长假后是节前最后一个交易日，由前端把日期一起显示。
+ *
+ * 每个交易日只成功取一次（进程内缓存）。失败重试间隔 60s，避免上游抖动时 5s 一次狂打。
+ */
+const PREV_AMOUNT_RETRY_MS = 60_000
+const prevAmountCache = new Map<string, { forDate: string; at: number; value: PrevAmount | null }>()
+
+interface PrevAmount {
+  /** `YYYY-MM-DD` */
+  date: string
+  points: IntradayAmtPoint[]
+}
+
+async function fetchPrevAmount(
+  code: string,
+  label: string,
+  sessionDate: string,
+  errors: string[],
+): Promise<PrevAmount | null> {
+  const cached = prevAmountCache.get(code)
+  if (
+    cached &&
+    cached.forDate === sessionDate &&
+    (cached.value !== null || Date.now() - cached.at < PREV_AMOUNT_RETRY_MS)
+  ) {
+    return cached.value
+  }
+
+  let json: unknown
+  try {
+    const res = await fetch(tencentDayUrl(code), {
+      headers: SINA_HEADERS,
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+    })
+    if (!res.ok) {
+      errors.push(`${label} 上日成交额返回 HTTP ${res.status}`)
+      prevAmountCache.set(code, { forDate: sessionDate, at: Date.now(), value: null })
+      return null
+    }
+    json = await res.json()
+  } catch (err) {
+    errors.push(`${label} 上日成交额抓取失败：${err instanceof Error ? err.message : String(err)}`)
+    prevAmountCache.set(code, { forDate: sessionDate, at: Date.now(), value: null })
+    return null
+  }
+
+  try {
+    const sessions = parseDaySessions(json, code)
+    const prev = sessions.find((s) => s.date !== sessionDate) ?? null
+    const points: IntradayAmtPoint[] = (prev?.points ?? [])
+      .filter((p) => p.amt !== null)
+      .map((p) => ({ t: p.t, v: p.amt as number }))
+
+    const value =
+      prev && points.length > 0
+        ? {
+            date: `${prev.date.slice(0, 4)}-${prev.date.slice(4, 6)}-${prev.date.slice(6, 8)}`,
+            points,
+          }
+        : null
+    prevAmountCache.set(code, { forDate: sessionDate, at: Date.now(), value })
+    return value
+  } catch (err) {
+    errors.push(`${label} 上日成交额解析失败：${err instanceof Error ? err.message : String(err)}`)
+    prevAmountCache.set(code, { forDate: sessionDate, at: Date.now(), value: null })
+    return null
+  }
+}
+
+async function buildIntraday(): Promise<IntradayPayload> {
+  const { minutes, ts } = beijingNow()
+  const wallClockDate = ts.slice(0, 10).replace(/-/g, '')
+  const errors: string[] = []
+  const indices = await Promise.all(
+    INTRADAY_INDICES.map(async ({ code, name }): Promise<IntradaySeries> => {
+      // 先取分时才知道数据属于哪个交易日；基准日必须跟着它走，
+      // 否则周末打开时会把「周五 vs 周五」当成同比（恒为 0）。基准日有缓存，第二次起不增加延迟。
+      const min = await fetchTencentMinPoints(code, name, errors)
+      const prevAmt = await fetchPrevAmount(code, name, min?.date ?? wallClockDate, errors)
+      return {
+        code,
+        name,
+        prev_close: min?.base ?? null,
+        points: min?.points ?? [],
+        prev_amt: prevAmt?.points ?? [],
+        prev_amt_date: prevAmt?.date ?? null,
+      }
+    }),
+  )
+  return { ts, session: sessionOf(minutes), indices, errors }
+}
+
+/** 4s 内的并发请求共用同一个 in-flight promise，避免一屏两个图各打一次上游。 */
+async function getIntraday(): Promise<IntradayPayload> {
+  if (intradayCache && Date.now() - intradayCache.at < INTRADAY_CACHE_MS) {
+    return intradayCache.payload
+  }
+  if (!intradayInFlight) {
+    intradayInFlight = buildIntraday()
+      .then((payload) => {
+        intradayCache = { at: Date.now(), payload }
+        return payload
+      })
+      .finally(() => {
+        intradayInFlight = null
+      })
+  }
+  return intradayInFlight
 }
 
 /* ------------------------------ 快讯（新浪 7×24） ------------------------------ */
@@ -1152,6 +1406,26 @@ export function createApiMiddleware(dataFiles: string[], holdingsFiles: string[]
             errors: [err instanceof Error ? err.message : String(err)],
           }),
         )
+      return
+    }
+
+    // 盘中分时（沪深300 / 科创50）：客户端 5s 轮询，服务端 4s 缓存合并重复请求
+    if (pathname === '/api/intraday') {
+      if (request.method && request.method !== 'GET' && request.method !== 'HEAD') {
+        sendJson(response, 405, { error: '仅支持 GET /api/intraday' })
+        return
+      }
+      void getIntraday()
+        .then((payload) => sendJson(response, 200, payload))
+        .catch((err: unknown) => {
+          const { minutes, ts } = beijingNow()
+          sendJson(response, 200, {
+            ts,
+            session: sessionOf(minutes),
+            indices: [],
+            errors: [err instanceof Error ? err.message : String(err)],
+          })
+        })
       return
     }
 
