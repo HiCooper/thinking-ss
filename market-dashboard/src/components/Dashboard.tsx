@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
 import ChartCard from './ChartCard'
+import DailyReviewCard from './DailyReviewCard'
 import SummaryCards from './SummaryCards'
 import TrendChart from './TrendChart'
 import TurnoverChart from './TurnoverChart'
@@ -62,6 +63,8 @@ export default function Dashboard({ data }: { data: MarketData }) {
         </div>
       </section>
 
+      <DailyReviewCard rows={rows} dataKey={data.generated_at} />
+
       <SummaryCards rows={rows} />
 
       {/* 图表网格：图1（趋势，通栏）→ 图2｜图3 → 图4｜图5 → 图6 通栏（归一化对比线宽一点更清楚） */}
@@ -69,7 +72,7 @@ export default function Dashboard({ data }: { data: MarketData }) {
         <ChartCard
           index="图 1"
           title="沪深300 趋势（收盘价 + MA20/MA60）"
-          subtitle="环境识别的第一问「趋势在不在」：价格站上/跌破 MA20 的区段以底色标出（浅红=上方，浅绿=下方），结论见上方「趋势状态」卡"
+          subtitle="环境识别的第一问「趋势在不在」：价格站上/跌破 MA20 的区段以底色标出（浅红=上方，浅绿=下方），结论见上方「每日复盘」卡"
           className="chart-card--wide"
           meta={
             <>

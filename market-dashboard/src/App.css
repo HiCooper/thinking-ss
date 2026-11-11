@@ -200,39 +200,178 @@
   min-width: 0;
 }
 
-/* 通栏结论卡（趋势状态）：独占一行，label / 结论 / 明细横向排布，
-   与下方四张竖排指标卡形成「先结论、后输入」的视觉层级 */
-.summary-card--wide {
-  grid-column: 1 / -1;
-  flex-direction: row;
-  align-items: center;
+/* ============================ 每日复盘（通栏结论卡） ============================ */
+/* 占住摘要卡之前的位置，与下方四张竖排读数卡形成「先结论、后输入」的层级。
+   一屏只说五行：结论 / 证据 / 条件 / 观察 / 研判。每行的数字都来自 src/review.ts，
+   卡上不写任何常量；只有「研判」那一行来自 review-notes.json，缺就整行显示未写入。 */
+.review {
+  padding: 14px 18px 13px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.review__head {
+  display: flex;
+  align-items: baseline;
   flex-wrap: wrap;
-  gap: 8px 24px;
-  padding: 14px 18px;
+  gap: 6px 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
 }
 
-.summary-card--wide .summary-card__label {
-  flex: 0 0 auto;
+.review__title {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: var(--accent);
 }
 
-.summary-card--wide .summary-card__value {
-  flex: 0 0 auto;
-}
-
-.summary-card--wide .summary-card__number {
+/* 档位沿用原趋势状态卡的大字号，扫一眼就能拿到结论 */
+.review__state {
   font-size: 30px;
+  font-weight: 700;
+  letter-spacing: -0.4px;
+  line-height: 1.1;
 }
 
-.summary-card--wide .summary-card__details {
+.review__date,
+.review__progress,
+.review__flag {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.review__flag {
+  padding: 1px 6px;
+  border: 1px dashed var(--border-strong);
+  border-radius: 999px;
+  color: var(--text-muted);
+}
+
+.review__spacer {
   flex: 1 1 auto;
-  flex-direction: row;
-  justify-content: flex-end;
-  flex-wrap: wrap;
-  gap: 4px 26px;
 }
 
-.summary-card--wide .summary-card__detail {
-  flex: 0 0 auto;
+.review__row {
+  display: flex;
+  gap: 12px;
+  padding: 7px 0;
+  border-bottom: 1px dashed var(--border);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.review__row:last-child {
+  border-bottom: 0;
+  padding-bottom: 2px;
+}
+
+.review__k {
+  flex: 0 0 42px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.review__t {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.review__ev {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 18px;
+}
+
+.review__ev > span {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+}
+
+.review__ev b {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.review__ev i {
+  font-style: normal;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.review__cond {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px 16px;
+  font-size: 12px;
+}
+
+.review__cond > span {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+}
+
+.review__dot {
+  flex: 0 0 8px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--border-strong);
+  /* 圆点贴着基线，和 12px 的文字一起读才不会浮在中间 */
+  transform: translateY(-1px);
+}
+
+.review__dot.is-met {
+  background: var(--up);
+}
+
+.review__dot.is-unmet {
+  background: var(--down);
+}
+
+.review__watch {
+  display: block;
+  margin-top: 3px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* 研判行有底色：它是全卡唯一「不是算出来的」的一行，要一眼分开 */
+.review__row.is-judge .review__t {
+  background: #fbfaf5;
+  border-left: 2px solid #ddd2ab;
+  border-radius: var(--radius-sm);
+  padding: 6px 10px;
+}
+
+.review__judge {
+  display: block;
+}
+
+.review__refs {
+  display: block;
+  margin-top: 3px;
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.review__notes-missing {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.review__pending {
+  padding: 10px 0 4px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-secondary);
 }
 
 .summary-card__label {

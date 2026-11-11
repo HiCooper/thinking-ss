@@ -1,0 +1,31 @@
+{
+  "generated_at": "2026-11-11 12:18 CST",
+  "source": "每日收盘流程由 agent 追加；judgment 是主观文字，refs 由本脚本从 data.json 复算",
+  "note": "研判行只在 as_of 等于复盘日时显示；直接跑 export_data.py 不会生成这里的内容，那是正常状态（卡片显示「未写入」），不是故障。",
+  "notes": [
+    {
+      "as_of": "2026-11-10",
+      "judgment": "收盘 4059.11 还差 MA20 的 0.77%，成交 15066 亿只在 250 日 3.6% 分位；宽度修复但量没跟上，收复 4090 前不追多。",
+      "refs": {
+        "as_of": "2026-11-10",
+        "hs300": 4059.11,
+        "ma20": 4090.44,
+        "ma60": 4383.49,
+        "dev_ma20_pct": -0.77,
+        "turnover_total": 15066.1,
+        "turnover_pct_rank": 3.6,
+        "margin_rz": 22581.5,
+        "margin_rz_diff": -13.9,
+        "margin_rz_as_of": "2026-11-10",
+        "margin_rz_ratio": 2.505,
+        "leverage_pct_rank": 1.2,
+        "adv_count": 4002,
+        "dec_count": 1073,
+        "breadth_high20": 469,
+        "breadth_low20": 67,
+        "us10y": 4.993
+      },
+      "written_at": "2026-11-11 12:18 CST"
+    }
+  ]
+}

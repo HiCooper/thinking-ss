@@ -357,6 +357,51 @@ export async function fetchIntraday(signal?: AbortSignal): Promise<IntradayData>
   return normalizeIntraday(await fetchLocalJson('/api/intraday', signal))
 }
 
+/* ------------------------------ /review-notes.json（每日研判） ------------------------------ */
+
+/**
+ * 收盘流程里 agent 写入的一条研判。
+ * `as_of` 必须等于它当时所依据的那个**已定稿交易日**，前端据此判断是否过期。
+ */
+export interface ReviewNote {
+  as_of: string
+  judgment: string
+  /** 写下这句话时引用的读数（成交额 / 杠杆率 / MA20 等），供人工回看校准 */
+  refs: Record<string, number | null>
+  written_at: string | null
+}
+
+/**
+ * 读取 `public/review-notes.json`（研判历史，最新在末尾）。
+ * **文件不存在是正常状态**：直接跑 `scripts/export_data.py` 而不是走 agent 收盘流程时，
+ * 没人写研判。此时返回空数组，复盘卡只摆骨架、研判行整行不渲染 —— 不拿旧句子冒充今天。
+ */
+export async function fetchReviewNotes(signal?: AbortSignal): Promise<ReviewNote[]> {
+  try {
+    const res = await fetch('/review-notes.json', { signal, cache: 'no-store' })
+    if (!res.ok) return []
+    const raw = await res.json()
+    const list = Array.isArray(raw) ? raw : (objOf(raw)?.notes as unknown[] | undefined) ?? []
+    const notes: ReviewNote[] = []
+    for (const item of list) {
+      const o = objOf(item)
+      const asOf = strOf(o ?? {}, 'as_of')
+      const judgment = strOf(o ?? {}, 'judgment')
+      if (!asOf || !judgment) continue
+      notes.push({
+        as_of: asOf,
+        judgment,
+        refs: (objOf(o?.refs) ?? {}) as Record<string, number | null>,
+        written_at: strOf(o ?? {}, 'written_at'),
+      })
+    }
+    return notes
+  } catch (err) {
+    if (err instanceof DOMException && err.name === 'AbortError') throw err
+    return []
+  }
+}
+
 /* ------------------------------ /api/data-version（数据热更新） ------------------------------ */
 
 /** `public/data.json` 的版本标记：mtime + size。 */
