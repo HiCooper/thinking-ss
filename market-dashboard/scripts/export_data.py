@@ -235,19 +235,91 @@ def fetch_sina_bond(symbol):
     return {x["d"]: float(x["c"]) for x in data}
 
 
-def fetch_margin(field):
+# 深市官方接口只能一天一请求，所以逐日补数只用在最近的这么多个缺失交易日上；
+# 更早的历史交给金十（它一次给全量），两边按日期拼接。
+MARGIN_OFFICIAL_TAIL = 15
+
+_MARGIN_JIN10 = None
+_MARGIN_OFFICIAL_MEMO = {}
+
+
+def _margin_from_jin10():
+    """金十 CDN 宏观序列 → {date: (融资余额亿, 融券余额亿)}，沪深相加。
+
+    历史全量、2 个请求，但**会停更**（见 `fetch_margin`），所以只用来垫历史。
+    """
+    global _MARGIN_JIN10
+    if _MARGIN_JIN10 is not None:
+        return _MARGIN_JIN10
     _require("akshare", ak)
     _require("pandas", pd)
 
     def side(df):
-        df = df[["日期", field]].copy()
+        df = df[["日期", "融资余额", "融券余额"]].copy()
         df["日期"] = pd.to_datetime(df["日期"]).dt.strftime("%Y-%m-%d")
-        df[field] = pd.to_numeric(df[field], errors="coerce") / 1e8      # 元 → 亿元
-        return dict(zip(df["日期"], df[field].round(1)))
+        rz = pd.to_numeric(df["融资余额"], errors="coerce") / 1e8      # 元 → 亿元
+        rq = pd.to_numeric(df["融券余额"], errors="coerce") / 1e8
+        return dict(zip(df["日期"], zip(rz.round(1), rq.round(1))))
+
     m = side(ak.macro_china_market_margin_sh())
-    for k, v in side(ak.macro_china_market_margin_sz()).items():
-        m[k] = round(m.get(k, 0) + v, 1)
+    for k, (rz, rq) in side(ak.macro_china_market_margin_sz()).items():
+        sh_rz, sh_rq = m.get(k, (0.0, 0.0))
+        m[k] = (round(sh_rz + rz, 1), round(sh_rq + rq, 1))
+    _MARGIN_JIN10 = m
     return m
+
+
+def _margin_from_official(dates):
+    """交易所官方两融 → {date: (融资余额亿, 融券余额亿)}；沪市区间一次、深市逐日。
+
+    只收「两市都拿到」的日期：缺一市就合计会变成真值的一半，而半个数看起来完全
+    像个正常读数，是最难被发现的一类错。
+    """
+    key = tuple(dates)
+    if key in _MARGIN_OFFICIAL_MEMO:
+        return _MARGIN_OFFICIAL_MEMO[key]
+    _require("akshare", ak)
+    _require("pandas", pd)
+    out = {}
+    if dates:
+        try:
+            df = ak.stock_margin_sse(start_date=dates[0].replace("-", ""),
+                                     end_date=dates[-1].replace("-", ""))
+            d = pd.to_datetime(df["信用交易日期"], format="%Y%m%d").dt.strftime("%Y-%m-%d")
+            rz = pd.to_numeric(df["融资余额"], errors="coerce") / 1e8
+            rq = pd.to_numeric(df["融券余量金额"], errors="coerce") / 1e8
+            sh = dict(zip(d, zip(rz, rq)))
+        except Exception as e:
+            log(f"[两融] 上交所区间抓取失败（{type(e).__name__}）→ 本窗口全部退回金十")
+            sh = {}
+        for day in dates:
+            if day not in sh:
+                continue
+            try:
+                row = ak.stock_margin_szse(date=day.replace("-", "")).iloc[-1]
+                sz_rz, sz_rq = float(row["融资余额"]), float(row["融券余额"])  # 官方已是亿元
+            except Exception:
+                continue
+            sh_rz, sh_rq = sh[day]
+            if pd.isna(sh_rz) or pd.isna(sh_rq) or pd.isna(sz_rz) or pd.isna(sz_rq):
+                continue
+            out[day] = (round(sh_rz + sz_rz, 1), round(sh_rq + sz_rq, 1))
+    _MARGIN_OFFICIAL_MEMO[key] = out
+    return out
+
+
+def fetch_margin(field, dates):
+    """两融余额（沪深两市合计，亿元）：**交易所官方为主源**，金十宏观序列只垫历史。
+
+    `dates` = 缓存里还缺的交易日；官方近端覆盖这些日期，金十提供窗口内的整段历史，
+    同一天官方赢。换掉纯金十的原因是它的 CDN 静态 JSON 会停更：实测 2026-11-06 起
+    断更 3 个交易日（`fs_1/fs_2.json` 最新戳停在 11-05），同期交易所官方已发到 11-10。
+    """
+    if not dates:
+        return {}
+    i = 0 if field == "融资余额" else 1
+    merged = {**_margin_from_jin10(), **_margin_from_official(dates[-MARGIN_OFFICIAL_TAIL:])}
+    return {d: v[i] for d, v in merged.items()}
 
 
 def fetch_kospi():
@@ -375,11 +447,22 @@ def main():
 
     official = build_official(days, cache, args.offline)
 
+    now_bj = beijing_now()
+    today_bj = now_bj.strftime("%Y-%m-%d")
+    today_final = now_bj.hour * 60 + now_bj.minute >= KLINE_FINAL_MINUTES
+
+    # 两融 T+1：当天交易所必然还没发，请求了也是空，所以只补严格早于今天的缺失日期。
+    margin_have = set(sc.get("margin_rz") or {}) & set(sc.get("margin_rq") or {})
+    margin_dates = [d for d in days if d not in margin_have and d < today_bj]
+    if margin_dates:
+        report.append(f"两融待补 {len(margin_dates)} 个交易日：{margin_dates[0]} ~ {margin_dates[-1]}"
+                      "（主源=交易所官方，金十垫历史）")
+
     defs = [
         ("us10y", "美国10Y国债", lambda: fetch_sina_bond("US10YT")),
         ("cn10y", "中国10Y国债", lambda: fetch_sina_bond("CN10YT")),
-        ("margin_rz", "融资余额", lambda: fetch_margin("融资余额")),
-        ("margin_rq", "融券余额", lambda: fetch_margin("融券余额")),
+        ("margin_rz", "融资余额", lambda: fetch_margin("融资余额", margin_dates)),
+        ("margin_rq", "融券余额", lambda: fetch_margin("融券余额", margin_dates)),
         ("kospi", "韩国KOSPI", fetch_kospi),
         ("star50", "科创50", fetch_star50),
         ("hs300", "沪深300", fetch_hs300),
@@ -402,9 +485,6 @@ def main():
     cn10y = fill_forward(series["cn10y"], days)
     kospi = fill_forward(series["kospi"], days)
 
-    now_bj = beijing_now()
-    today_bj = now_bj.strftime("%Y-%m-%d")
-    today_final = now_bj.hour * 60 + now_bj.minute >= KLINE_FINAL_MINUTES
     if not today_final and today_bj in days:
         report.append(
             f"⚠ {today_bj} 未到 {KLINE_FINAL_MINUTES // 60}:{KLINE_FINAL_MINUTES % 60:02d}（北京时间 "
@@ -440,7 +520,8 @@ def main():
         "generated_at": now_bj.strftime("%Y-%m-%d %H:%M") + " CST",
         "sources": "成交额与流通市值=上交所/深交所官方日度（stock_sse_deal_daily + stock_szse_summary）；"
                    "国债收益率=新浪全球国债（US10YT/CN10YT，按A股日历前值填充）；"
-                   "两融=沪深交易所宏观序列（akshare macro_china_market_margin_sh/sz）；"
+                   "两融=上交所/深交所官方日度（stock_margin_sse + stock_margin_szse），"
+                   "金十宏观序列（macro_china_market_margin_sh/sz）仅垫历史；"
                    "KOSPI=新浪 index_global_hist_sina（东财兜底）；科创50=腾讯日K；沪深300=腾讯日K；"
                    "市场宽度（创新高/新低家数、涨跌家数）=乐咕乐股（全量历史 + 当日快照，快照口径收盘后逐日累积）。"
                    "金额单位：亿元；收益率单位：%；指数单位：点；比率为 %。",
